@@ -38,8 +38,8 @@ def select_cnf(cnf, clause_visited, fanout_idx):
     clauses_contain_fanout = []
     # Find all clauses containing fanout_idx
     for clause_idx, clause in enumerate(cnf):
-        if clause_visited[clause_idx] == 1:
-            continue
+        # if clause_visited[clause_idx] == 1:
+        #     continue
         if fanout_var in clause or -fanout_var in clause:
             clauses_contain_fanout.append(clause_idx)
             for var in clause:
@@ -222,6 +222,9 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         
         for clause_idx in selected_clause_index:
             clause_visited[clause_idx] = 1
+    
+    if 0 in clause_visited:
+        raise('[WARNING] Some clauses are not covered')
         
     # Finish converting 
     print('Finish converting')
