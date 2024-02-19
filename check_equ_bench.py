@@ -1,92 +1,116 @@
 import numpy as np 
-import glob
 import os 
-import itertools
-
-from utils.utils import run_command
-import utils.cnf_utils as cnf_utils
-import utils.clut_utils as clut_utils
+import copy
 import utils.lut_utils as lut_utils
-import utils.aiger_utils as aiger_utils
+import utils.cnf_utils as cnf_utils
 import utils.circuit_utils as circuit_utils
-from utils.simulator import dec2list, list2hex
+import utils.aiger_utils as aiger_utils
+import utils.simulator as simulator
+from utils.utils import run_command
+from main import main as cnf2lut
 
-def hex2list(hex_str):
-    bin_str = bin(int(hex_str, 16))[2:]
-    bin_str = bin_str[::-1]
-    return [int(bit) for bit in bin_str]
-
-def lut2tt(tt_hex, ordered_lut_fanin):
-    # tt_hex = '0x' + tt_hex.zfill(len(tt_hex))
-    lut_tt = hex2list(tt_hex)
-    lut_len = len(lut_tt)
-    lut_fanin_list = ordered_lut_fanin[::-1]
-    lut_tt = lut_tt[::-1]
-    return lut_tt, lut_fanin_list
-
-def xdata_to_cnf2(data, fanin_list):
-    cnf = []
-    for idx, x_data_info in enumerate(data): 
-        if x_data_info[1] =='':
-            continue
-        elif x_data_info[1].startswith('0x'):
-            no_fanin = len(fanin_list[idx])
-            lut_len = int(pow(2, no_fanin))
-            lut_tt,_ = lut2tt(x_data_info[1], fanin_list[idx])
-            lut_tt = (lut_len-len(lut_tt)) * [0] + lut_tt
-            
-            # 从LUT中恢复出门电路的真值表 以子句形式加入
-            for tt_idx, tt_value in enumerate(lut_tt): 
-                if tt_value == 0:
-                    tt_bin = bin(tt_idx)[2:]
-                    padded_binary_string = tt_bin.zfill(no_fanin)
-                    binary_array = [int(bit) for bit in padded_binary_string]
-                    tt_array = [-1 if x == 0 else x for x in binary_array]      #[0,1]转换成[-1,1]
-                    clause = [x * (y+1) for x, y in zip(tt_array, fanin_list[idx])]
-                cnf.append(clause)  
-    # cnf = list(set(tuple(x) for x in cnf))
-    return cnf
+NO_PIS = 3
 
 if __name__ == '__main__':
+    init_bench_path = './tmp/init.bench'
+    init_aig_path = './tmp/init.aig'
+    cnf_path = './tmp/init.cnf'
+    output_bench_path = './tmp/output.bench'
+    output_aig_path = './tmp/output.aig'
     
-    x_data_old, fanin_list_old, fanout_list_old = lut_utils.parse_bench("test/old.bench")   # abc造case时直接生成的
-    x_data_new, fanin_list_new, fanout_list_new = lut_utils.parse_bench("test/new.bench")   # main.py生成的
-    
-    cnf_old = xdata_to_cnf2(x_data_old, fanin_list_old)   
-    cnf_new = xdata_to_cnf2(x_data_new, fanin_list_new)   
-    
-    PI_indexs_old = []
-    for i in range(len(x_data_old)):
-        if len(fanin_list_old[i]) == 0:
-            PI_indexs_old.append(i)        
-    PI_indexs_new = []
-    for i in range(len(x_data_new)):
-        if len(fanin_list_new[i]) == 0:
-            PI_indexs_new.append(i)
-            
-    PO_indexs_old = []
-    for i in range(len(x_data_old)):
-        if len(fanout_list_old[i]) == 0:
-            PO_indexs_old.append(i)  
-    assert len(PO_indexs_old) == 1      
-    PO_indexs_new = []
-    for i in range(len(x_data_new)):
-        if len(fanout_list_new[i]) == 0:
-            PO_indexs_new.append(i)
-    assert len(PO_indexs_new) == 1
-    
-    po_var_old = PO_indexs_old[0]+1
-    po_var_new = PO_indexs_new[0]+1
-    
-    new_var = max(len(x_data_old),len(x_data_new)) + 1   
-    new_clause = [ [-po_var_old,-po_var_new,-new_var], [po_var_old,po_var_new,-new_var],[po_var_old,-po_var_new,new_var],[-po_var_old,po_var_new,new_var],[new_var]]
-    cnf = cnf_old + cnf_new + new_clause
-    
-    sat_status, _ , _ = cnf_utils.kissat_solve( cnf, max(len(x_data_old),len(x_data_new))+1 )
-    
-    print(sat_status)
-    
-    
+    for tt_idx in range(2 ** (2 ** NO_PIS)):
+        # if tt_idx != 254 :
+        #     continue
+        tt = simulator.dec2list(tt_idx, (2 ** NO_PIS))
+        tt_hex = simulator.list2hex(tt, 2)
+        cmd = 'abc -c \'read_truth {}; strash; write_bench {}; write_aiger {}; print_stats; \''.format(
+            tt_hex, init_bench_path, init_aig_path
+        )
+        stdout_info, _ = run_command(cmd)
+        if not 'and' in stdout_info[-2]:
+            print('[INFO] Skip: {}\n'.format(tt_hex))
+            continue
+        
+        x_data, edge_index = aiger_utils.aig_to_xdata(init_aig_path)
+        fanin_list, fanout_list = circuit_utils.get_fanin_fanout(x_data, edge_index)
+        PO_indexs = []
+        PI_indexs = []
+        for i in range(len(x_data)):
+            if len(fanout_list[i]) == 0 and len(fanin_list[i]) > 0:
+                PO_indexs.append(i)
+            if len(fanin_list[i]) == 0 and len(fanout_list[i]) > 0:
+                PI_indexs.append(i)
+        if len(PO_indexs) != 1:
+            continue
+        if len(PI_indexs) != NO_PIS:
+            continue
+        
+        cnf = aiger_utils.aig_to_cnf(x_data, fanin_list, const_1=PO_indexs)
+        cnf_utils.save_cnf(cnf, len(x_data), cnf_path)
+        
+        # Convert to LUT
+        cnf2lut(cnf_path, output_bench_path)
+        
+        # Parse Bench
+        bench_x_data, bench_fanin_list, bench_fanout_list = lut_utils.parse_bench(output_bench_path)
+        bench_PI_indexs = []
+        bench_PO_indexs = []
+        for i in range(len(bench_x_data)):
+            if len(bench_fanout_list[i]) == 0 and len(bench_fanin_list[i]) > 0:
+                bench_PO_indexs.append(i)
+            if len(bench_fanin_list[i]) == 0 and len(bench_fanout_list[i]) > 0:
+                bench_PI_indexs.append(i)
+        assert len(bench_PO_indexs) == 1
+        bench_cnf = lut_utils.convert_cnf(bench_x_data, bench_fanin_list, bench_PO_indexs[0])
+        
+        # Matching 
+        map_bench_init = {}
+        for i in range(len(bench_x_data)):
+            bench_node_name = int(bench_x_data[i][0].replace('N', ''))
+            if bench_node_name < len(x_data):
+                map_bench_init[i] = bench_node_name
+                    
+        # Reindex bench CNF
+        assert len(bench_cnf[-1]) == 1 and bench_cnf[-1][0] == bench_PO_indexs[0] + 1
+        assert len(cnf[-1]) == 1 and cnf[-1][0] == PO_indexs[0] + 1
+        new_bench_cnf = copy.deepcopy(bench_cnf)
+        max_init_var = len(x_data) - len(map_bench_init)
+        for clause_k in range(len(new_bench_cnf)):
+            for ele_k in range(len(new_bench_cnf[clause_k])):
+                literal = new_bench_cnf[clause_k][ele_k]
+                if abs(literal)-1 in map_bench_init:
+                    if literal > 0:
+                        new_bench_cnf[clause_k][ele_k] = map_bench_init[abs(literal)-1] + 1
+                    else:
+                        new_bench_cnf[clause_k][ele_k] = -1 * (map_bench_init[abs(literal)-1] + 1)
+                else:
+                    if literal > 0:
+                        new_bench_cnf[clause_k][ele_k] = literal + max_init_var
+                    else:
+                        new_bench_cnf[clause_k][ele_k] = literal - max_init_var
+        
+        # Create Miter 
+        init_po_var = cnf[-1][0]
+        output_po_var = new_bench_cnf[-1][0]
+        po_var = len(x_data) + len(bench_x_data) - len(PI_indexs) + 2
+        miter_cnf = [[-init_po_var, -output_po_var, -po_var], 
+                     [init_po_var, output_po_var, -po_var], 
+                     [init_po_var, -output_po_var, po_var], 
+                     [-init_po_var, output_po_var, po_var]]
+        final_check_cnf = cnf[:-1] + new_bench_cnf[:-1] + miter_cnf + [[po_var]]
+        
+        # !!! transformed cnf (bench cnf) must be SAT
+        # Logic-1 in truth table of LUT bench should be same as initial AIG
+        # Otherwise, AIG may be 1 but bench is 0 due to the deloop variable enforces XNOR to be 0
+        final_check_cnf += new_bench_cnf[-1:]
+        
+        sat_status, asg, _ = cnf_utils.kissat_solve(final_check_cnf, po_var)
+        
+        print(tt_idx, sat_status)
+        assert sat_status == 0
+        print()
 
-    
-    
+        os.remove(init_bench_path)
+        os.remove(init_aig_path)
+        os.remove(cnf_path)
+        os.remove(output_bench_path)

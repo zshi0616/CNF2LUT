@@ -1,5 +1,6 @@
 import numpy as np 
 import os 
+import copy
 import utils.lut_utils as lut_utils
 import utils.cnf_utils as cnf_utils
 import utils.circuit_utils as circuit_utils
@@ -61,41 +62,61 @@ if __name__ == '__main__':
         assert len(bench_PO_indexs) == 1
         bench_cnf = lut_utils.convert_cnf(bench_x_data, bench_fanin_list, bench_PO_indexs[0])
         
-        # Map bench_cnf to new index
-        bench_index_map = {}
+        # PI Matching 
+        map_bench_init = {}
         for i in range(len(bench_x_data)):
-            if i not in bench_PI_indexs:
-                bench_index_map[i] = len(bench_index_map) + len(x_data) + 1
-        for i in bench_PI_indexs:
-            init_index = int(bench_x_data[i][0].replace('N', ''))
-            if init_index >= len(x_data):
-                bench_index_map[i] = len(bench_index_map) + len(x_data) + 1
-        for i in bench_PI_indexs:
-            init_index = int(bench_x_data[i][0].replace('N', ''))
-            if init_index < len(x_data): 
-                bench_index_map[i] = init_index
+            if bench_x_data[i][1] == '':
+                pi_name = int(bench_x_data[i][0].replace('N', ''))
+                if pi_name < len(PI_indexs):
+                    map_bench_init[i] = pi_name
+            
+        # Convert bench to AIG
+        bench_aig_path = './tmp/output.aig'
+        cmd = 'abc -c \'read {}; strash; write_aiger {}; print_stats; \''.format(
+            output_bench_path, bench_aig_path
+        )
+        stdout_info, _ = run_command(cmd)
+        bench_x_data, bench_edge_index = aiger_utils.aig_to_xdata(bench_aig_path)
+        bench_fanin_list, bench_fanout_list = circuit_utils.get_fanin_fanout(bench_x_data, bench_edge_index)
+        bench_PO_indexs = []
+        bench_PI_indexs = []
+        for i in range(len(bench_x_data)):
+            if len(bench_fanout_list[i]) == 0 and len(bench_fanin_list[i]) > 0:
+                bench_PO_indexs.append(i)
+            if len(bench_fanin_list[i]) == 0 and len(bench_fanout_list[i]) > 0:
+                bench_PI_indexs.append(i)
+        assert len(bench_PO_indexs) == 1
+        bench_cnf = aiger_utils.aig_to_cnf(bench_x_data, bench_fanin_list, const_1=bench_PO_indexs)
         
-        # Update bench_cnf
-        for clause_k in range(len(bench_cnf)):
-            for ele_k in range(len(bench_cnf[clause_k])):
-                old_literal = bench_cnf[clause_k][ele_k]
-                if old_literal > 0:
-                    bench_cnf[clause_k][ele_k] = bench_index_map[abs(old_literal)-1]+1
+        # Reindex bench CNF
+        assert len(bench_cnf[-1]) == 1 and bench_cnf[-1][0] == bench_PO_indexs[0] + 1
+        assert len(cnf[-1]) == 1 and cnf[-1][0] == PO_indexs[0] + 1
+        new_bench_cnf = copy.deepcopy(bench_cnf)
+        max_init_var = len(x_data) - len(map_bench_init)
+        for clause_k in range(len(new_bench_cnf)):
+            for ele_k in range(len(new_bench_cnf[clause_k])):
+                literal = new_bench_cnf[clause_k][ele_k]
+                if abs(literal)-1 in map_bench_init:
+                    if literal > 0:
+                        new_bench_cnf[clause_k][ele_k] = map_bench_init[abs(literal)-1] + 1
+                    else:
+                        new_bench_cnf[clause_k][ele_k] = -1 * (map_bench_init[abs(literal)-1] + 1)
                 else:
-                    bench_cnf[clause_k][ele_k] = -1 * (bench_index_map[abs(old_literal)-1]+1)
-        bench_PO_indexs[0] = bench_index_map[bench_PO_indexs[0]]
-        
-        # Create miter
-        init_po_var = PO_indexs[0] + 1
-        output_po_var = bench_PO_indexs[0] + 1
+                    if literal > 0:
+                        new_bench_cnf[clause_k][ele_k] = literal + max_init_var
+                    else:
+                        new_bench_cnf[clause_k][ele_k] = literal - max_init_var
+
+        # Create Miter 
+        init_po_var = cnf[-1][0]
+        output_po_var = new_bench_cnf[-1][0]
         po_var = len(x_data) + len(bench_x_data) - len(PI_indexs) + 2
-        assert len(cnf[-1]) == 1 and cnf[-1][0] == init_po_var        
-        assert len(bench_cnf[-1]) == 1 and bench_cnf[-1][0] == output_po_var
         miter_cnf = [[-init_po_var, -output_po_var, -po_var], 
                      [init_po_var, output_po_var, -po_var], 
                      [init_po_var, -output_po_var, po_var], 
                      [-init_po_var, output_po_var, po_var]]
-        final_check_cnf = cnf[:-1] + bench_cnf[:-1] + miter_cnf + [[po_var]]
+        final_check_cnf = cnf[:-1] + new_bench_cnf[:-1] + miter_cnf + [[po_var]]
+        
         sat_status, asg, _ = cnf_utils.kissat_solve(final_check_cnf, po_var)
         
         print(tt_idx, sat_status)

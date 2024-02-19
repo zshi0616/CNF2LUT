@@ -38,14 +38,26 @@ def select_cnf(cnf, clause_visited, fanout_idx):
     clauses_contain_fanout = []
     # Find all clauses containing fanout_idx
     for clause_idx, clause in enumerate(cnf):
-        # if clause_visited[clause_idx] == 1:
-        #     continue
+        if clause_visited[clause_idx] == 1:
+            continue
         if fanout_var in clause or -fanout_var in clause:
             clauses_contain_fanout.append(clause_idx)
             for var in clause:
                 if abs(var) == fanout_var:
                     continue
                 var_list[abs(var)] = 1
+    # Find other clauses contained by fan-in var
+    for clause_idx, clause in enumerate(cnf):
+        if clause_visited[clause_idx] == 1:
+            continue
+        is_contained = True
+        for var in clause:
+            if abs(var) not in var_list:
+                is_contained = False
+                break
+        if is_contained:
+            clauses_contain_fanout.append(clause_idx)
+
     # Select maximum covering combination
     var_list = list(var_list.keys())
     if len(var_list) <= LUT_MAX_FANIN-2:
