@@ -9,7 +9,7 @@ import utils.simulator as simulator
 from utils.utils import run_command
 from main import main as cnf2lut
 
-NO_PIS = 3
+NO_PIS = 4
 
 if __name__ == '__main__':
     init_bench_path = './tmp/init.bench'
@@ -19,10 +19,8 @@ if __name__ == '__main__':
     output_aig_path = './tmp/output.aig'
     
     for tt_idx in range(2 ** (2 ** NO_PIS)):
-        # if tt_idx != 254 :
-        #     continue
         tt = simulator.dec2list(tt_idx, (2 ** NO_PIS))
-        tt_hex = simulator.list2hex(tt, 2)
+        tt_hex = simulator.list2hex(tt, 2 ** (NO_PIS-2))
         cmd = 'abc -c \'read_truth {}; strash; write_bench {}; write_aiger {}; print_stats; \''.format(
             tt_hex, init_bench_path, init_aig_path
         )
@@ -106,8 +104,8 @@ if __name__ == '__main__':
         
         sat_status, asg, _ = cnf_utils.kissat_solve(final_check_cnf, po_var)
         
-        print(tt_idx, sat_status)
         assert sat_status == 0
+        print('TT: {}, Pass '.format(tt_idx))
         print()
 
         os.remove(init_bench_path)
