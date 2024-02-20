@@ -77,16 +77,24 @@ def feature_gen_init(lines):
                 
     return x_data, fanin_list, fanout_list
 
-def convert_cnf(data, fanin_list, po_idx=-1):
+def convert_cnf(data, fanin_list, po_idx=-1, use_node_name=False):
     cnf = []
     for idx, x_data_info in enumerate(data): 
         if x_data_info[1] == '':
             continue
         if x_data_info[1] == 'gnd':
-            cnf.append([-1 * (idx + 1)])
+            if use_node_name: 
+                node_name = int(x_data_info[0].replace('N', ''))
+                cnf.append([-1 * (node_name + 1)])
+            else:
+                cnf.append([-1 * (idx + 1)])
             continue
         if x_data_info[1] == 'vdd':
-            cnf.append([1 * (idx + 1)])
+            if use_node_name: 
+                node_name = int(x_data_info[0].replace('N', ''))
+                cnf.append([1 * (node_name + 1)])
+            else:
+                cnf.append([1 * (idx + 1)])
             continue
         tt_len = int(pow(2, len(fanin_list[idx])))
         func = bin(int(x_data_info[1], 16))[2:].zfill(tt_len)
@@ -94,17 +102,28 @@ def convert_cnf(data, fanin_list, po_idx=-1):
         
         for func_idx, y_str in enumerate(func):
             y = 1 if int(y_str) == 1 else -1
-            clause = [y * (idx+1)]
+            if use_node_name:
+                clause = [y * (int(x_data_info[0].replace('N', '')) + 1)]
+            else:
+                clause = [y * (idx+1)]
             
             mask_val = tt_len - func_idx - 1
             mask_list = bin(mask_val)[2:].zfill(len(fanin_list[idx]))
             for k, ele in enumerate(mask_list):
-                var = fanin_list[idx][-1 * (k+1)] + 1
+                if use_node_name:
+                    node_name = int(data[fanin_list[idx][-1 * (k+1)]][0].replace('N', ''))
+                    var = node_name + 1
+                else:
+                    var = fanin_list[idx][-1 * (k+1)] + 1
                 var = var if int(ele) == 0 else (-1 * var)
                 clause.append(var)
             cnf.append(clause)
     if po_idx != -1:
-        cnf.append([po_idx + 1])
+        if use_node_name:
+            node_name = int(data[po_idx][0].replace('N', ''))
+            cnf.append([node_name + 1])
+        else:
+            cnf.append([po_idx + 1])
             
     return cnf                       
 

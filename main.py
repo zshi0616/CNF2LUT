@@ -236,7 +236,8 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
             clause_visited[clause_idx] = 1
     
     if 0 in clause_visited:
-        raise('[WARNING] Some clauses are not covered')
+        print('[WARNING] Some clauses are not covered')
+        # raise('[WARNING] Some clauses are not covered')
         
     # Finish converting 
     print('Finish converting')

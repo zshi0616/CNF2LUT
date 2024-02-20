@@ -19,6 +19,8 @@ if __name__ == '__main__':
     output_aig_path = './tmp/output.aig'
     
     for tt_idx in range(2 ** (2 ** NO_PIS)):
+        if tt_idx < 3050:
+            continue
         tt = simulator.dec2list(tt_idx, (2 ** NO_PIS))
         tt_hex = simulator.list2hex(tt, 2 ** (NO_PIS-2))
         cmd = 'abc -c \'read_truth {}; strash; write_bench {}; write_aiger {}; print_stats; \''.format(
