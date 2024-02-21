@@ -16,7 +16,7 @@ RANDOM_TEST = False
 AIG_DIR = '/Users/zhengyuanshi/studio/dataset/LEC/all_case'
 AIG_PATH_LIST = [
     # 'aa16', 'mult_op_DEMO1_13_13_TOP1', 'mult_op_DEMO1_9_9_TOP4', 'ab21', 'mult_op_DEMO1_5_5_TOP4', 'mult_op_DEMO1_9_9_TOP5', 'mult_op_DEMO1_3_3_TOP4', 'f14', 'b15', 'mult_op_DEMO1_5_5_TOP5', 'c12', 'mult_op_DEMO1_4_4_TOP5', 'd13', 'ac37', 'mult_op_DEMO1_10_10_TOP5', 'mult_op_DEMO1_11_11_TOP4', 'mult_op_DEMO1_8_8_TOP3', 'ad38', 'mult_op_DEMO1_12_12_TOP4', 'mult_op_DEMO1_4_4_TOP8', 'mult_op_DEMO1_9_9_TOP3', 'd27', 'mult_op_DEMO1_7_7_TOP3', 'e13', 'mult_op_DEMO1_10_10_TOP4', 'aa34', 'h33', 'mult_op_DEMO1_3_3_TOP6'
-    'a28'
+    'ad8'
 ]
 
 if __name__ == '__main__':
