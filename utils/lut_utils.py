@@ -6,7 +6,6 @@ import time
 import copy
 import numpy as np 
 import os 
-from numpy.random import randint
 from collections import Counter
 
 from utils.utils import run_command

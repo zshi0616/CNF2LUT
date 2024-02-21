@@ -28,7 +28,7 @@ if __name__ == '__main__':
         if len(bench_fanin_list[i]) == 0 and len(bench_fanout_list[i]) > 0:
             bench_PI_indexs.append(i)
     assert len(bench_PO_indexs) == 1
-    bench_cnf = lut_utils.convert_cnf(bench_x_data, bench_fanin_list, bench_PO_indexs[0], use_node_name=True)
+    bench_cnf = lut_utils.convert_cnf(bench_x_data, bench_fanin_list, po_idx=bench_PO_indexs[0], use_node_name=True)
     bench_no_var = max(abs(var) for clause in bench_cnf for var in clause)
     
     tmp_filename = './tmp/exp.cnf'
