@@ -9,7 +9,8 @@ import utils.simulator as simulator
 from utils.utils import run_command
 from main import main as cnf2lut
 
-NO_PIS = 3
+NO_PIS = 4
+RANDOM_TEST = True
 
 if __name__ == '__main__':
     init_bench_path = './tmp/init.bench'
@@ -18,9 +19,12 @@ if __name__ == '__main__':
     output_bench_path = './tmp/output.bench'
     output_aig_path = './tmp/output.aig'
     
-    for tt_idx in range(2 ** (2 ** NO_PIS)):
-        if tt_idx != 7:
-            continue
+    for loop_idx in range(2 ** (2 ** NO_PIS)):
+        if RANDOM_TEST:
+            tt_idx = np.random.randint(0, 2 ** (2 ** NO_PIS))
+            print('Start TT: {}'.format(tt_idx))
+        else:
+            tt_idx = loop_idx 
         tt = simulator.dec2list(tt_idx, (2 ** NO_PIS))
         tt_hex = simulator.list2hex(tt, 2 ** (NO_PIS-2))
         cmd = 'abc -c \'read_truth {}; strash; write_bench {}; write_aiger {}; print_stats; \''.format(
@@ -67,50 +71,58 @@ if __name__ == '__main__':
         map_bench_init = {}
         for i in range(len(bench_x_data)):
             bench_node_name = int(bench_x_data[i][0].replace('N', ''))
-            if bench_node_name < len(x_data):
-                map_bench_init[i] = bench_node_name
+            map_bench_init[i] = bench_node_name
                     
         # Reindex bench CNF
         assert len(bench_cnf[-1]) == 1 and bench_cnf[-1][0] == bench_PO_indexs[0] + 1
         assert len(cnf[-1]) == 1 and cnf[-1][0] == PO_indexs[0] + 1
         new_bench_cnf = copy.deepcopy(bench_cnf)
-        max_init_var = len(x_data) - len(map_bench_init)
         for clause_k in range(len(new_bench_cnf)):
             for ele_k in range(len(new_bench_cnf[clause_k])):
                 literal = new_bench_cnf[clause_k][ele_k]
-                if abs(literal)-1 in map_bench_init:
-                    if literal > 0:
-                        new_bench_cnf[clause_k][ele_k] = map_bench_init[abs(literal)-1] + 1
-                    else:
-                        new_bench_cnf[clause_k][ele_k] = -1 * (map_bench_init[abs(literal)-1] + 1)
+                if literal > 0:
+                    new_bench_cnf[clause_k][ele_k] = map_bench_init[abs(literal)-1] + 1
                 else:
-                    if literal > 0:
-                        new_bench_cnf[clause_k][ele_k] = literal + max_init_var
-                    else:
-                        new_bench_cnf[clause_k][ele_k] = literal - max_init_var
+                    new_bench_cnf[clause_k][ele_k] = -1 * (map_bench_init[abs(literal)-1] + 1)
         
-        # Create Miter 
-        init_po_var = cnf[-1][0]
-        output_po_var = new_bench_cnf[-1][0]
-        po_var = len(x_data) + len(bench_x_data) - len(PI_indexs) + 2
-        miter_cnf = [[-init_po_var, -output_po_var, -po_var], 
-                     [init_po_var, output_po_var, -po_var], 
-                     [init_po_var, -output_po_var, po_var], 
-                     [-init_po_var, output_po_var, po_var]]
-        final_check_cnf = cnf[:-1] + new_bench_cnf[:-1] + miter_cnf + [[po_var]]
-        
-        # !!! transformed cnf (bench cnf) must be SAT
-        # Logic-1 in truth table of LUT bench should be same as initial AIG
-        # Otherwise, AIG may be 1 but bench is 0 due to the deloop variable enforces XNOR to be 0
-        # final_check_cnf += new_bench_cnf[-1:]
-        
-        sat_status, asg, _ = cnf_utils.kissat_solve(final_check_cnf, po_var)
-        
-        assert sat_status == 0
-        print('TT: {}, Pass '.format(tt_idx))
-        print()
-
+        # Solve bench cnf
+        sat_status, asg, _ = cnf_utils.kissat_solve(new_bench_cnf, len(bench_x_data))
         os.remove(init_bench_path)
         os.remove(init_aig_path)
         os.remove(cnf_path)
         os.remove(output_bench_path)
+        
+        # BCP
+        bcp_cnf = copy.deepcopy(cnf)
+        remove_flag = [False] * len(bcp_cnf)
+        check_cnf_res = True
+        for var in range(1, len(x_data)+1):
+            var_value = asg[var-1]
+            for clause_k, clause in enumerate(bcp_cnf):
+                if remove_flag[clause_k]:
+                    continue
+                if var_value == 1:
+                    if var in clause:
+                        remove_flag[clause_k] = True
+                        continue
+                    if -var in clause:
+                        clause.remove(-var)
+                else:
+                    if -var in clause:
+                        remove_flag[clause_k] = True
+                        continue
+                    if var in clause:
+                        clause.remove(var)
+        
+            for clause_k, clause in enumerate(bcp_cnf):
+                if len(clause) == 0:
+                    print('{:}, UNSAT'.format(var))
+                    check_cnf_res = False
+                    break
+            if check_cnf_res == False:
+                break
+            
+        print('TT: {}, Check: {}'.format(tt_idx, check_cnf_res))
+        assert len(remove_flag) == np.sum(remove_flag)
+        assert check_cnf_res
+        print()

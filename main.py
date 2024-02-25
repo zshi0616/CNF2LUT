@@ -2,6 +2,7 @@ import numpy as np
 import glob
 import os 
 import itertools
+import copy
 
 from utils.utils import run_command
 import utils.cnf_utils as cnf_utils
@@ -30,6 +31,22 @@ def check_loop(fanout_list, src, dst):
             if visited[fanout] == 0:
                 queue.append(fanout)
     return False
+
+def divide_long_clauses(cnf, no_var, max_length=4):
+    res_cnf = []
+    res_no_var = no_var
+    for clause in cnf:
+        if len(clause) < max_length:
+            res_cnf.append(clause)
+        else:
+            # divide clause based on resolution rules 
+            while len(clause) > max_length-1:
+                new_var = res_no_var + 1
+                res_cnf.append(clause[:max_length-1] + [new_var])
+                res_no_var += 1
+                clause = [-new_var] + clause[max_length-1:]
+            res_cnf.append(clause)
+    return res_cnf, res_no_var
 
 def select_cnf(cnf, clause_visited, fanout_idx):
     fanout_var = fanout_idx + 1
@@ -64,7 +81,12 @@ def select_cnf(cnf, clause_visited, fanout_idx):
         max_cover_list = clauses_contain_fanout
         max_comb = var_list
     else:
+        # TODO: Check here 
         comb_list = list(itertools.combinations(var_list, LUT_MAX_FANIN-2))  # -2 because fanout_idx and possible new fanin
+        if len(comb_list) > 1000: # Random select 1000
+            comb_list = np.array(comb_list)
+            indices = np.random.choice(len(comb_list), 1000, replace=False)
+            comb_list = comb_list[indices]
         max_cover_list = []
         max_comb = []
         for comb in comb_list:
@@ -83,6 +105,29 @@ def select_cnf(cnf, clause_visited, fanout_idx):
             if len(cover_list) > len(max_cover_list):
                 max_cover_list = cover_list
                 max_comb = comb
+        if len(max_cover_list) == 0:
+            return None, None, max_cover_list
+                    
+        ''' Max cover list and max comb are not used in this version, too slow '''
+        # comb_list = list(itertools.combinations(var_list, LUT_MAX_FANIN-2))  # -2 because fanout_idx and possible new fanin
+        # max_cover_list = []
+        # max_comb = []
+        # for comb in comb_list:
+        #     cover_list = []
+        #     for clause_idx in clauses_contain_fanout:
+        #         clause = cnf[clause_idx]
+        #         covered = True
+        #         for var in clause:
+        #             if abs(var) == fanout_var:
+        #                 continue
+        #             if abs(var) not in comb:
+        #                 covered = False
+        #                 break
+        #         if covered:
+        #             cover_list.append(clause_idx)
+        #     if len(cover_list) > len(max_cover_list):
+        #         max_cover_list = cover_list
+        #         max_comb = comb
     
     # select clauses
     var_map = {}
@@ -134,6 +179,30 @@ def create_lut(lut_tt, lut_fanin_list):
     tt_hex = list2hex(lut_tt[::-1], lut_len)
     return tt_hex, ordered_lut_fanin
 
+def add_extra_and(x_data, fanin_list, and_list): 
+    k = 0
+    while k < len(and_list): 
+        extra_and_idx = len(x_data)
+        if k + 3 < len(and_list):
+            x_data.append([extra_and_idx, gate_to_index['LUT'], '8000'])
+            fanin_list.append([and_list[k], and_list[k+1], and_list[k+2], and_list[k+3]])
+            and_list.append(extra_and_idx)
+            k += 4
+        elif k + 2 < len(and_list):
+            x_data.append([extra_and_idx, gate_to_index['LUT'], '80'])
+            fanin_list.append([and_list[k], and_list[k+1], and_list[k+2]])
+            and_list.append(extra_and_idx)
+            k += 3
+        elif k + 1 < len(and_list):
+            x_data.append([extra_and_idx, gate_to_index['LUT'], '8'])
+            fanin_list.append([and_list[k], and_list[k+1]])
+            and_list.append(extra_and_idx)
+            k += 2
+        else:
+            # print('[INFO] PO: %d' % and_list[k])
+            break
+    return x_data, fanin_list, and_list[k]
+
 def convert_cnf_xdata(cnf, po_var, no_vars):
     x_data = []     # [name, is_lut, tt]
     fanin_list = []
@@ -143,6 +212,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     extra_po = []
     extra_pi = []
     po_idx = po_var - 1
+    map_inv_idx = {}
     
     # Consider the unit clause as PO, generate LUT for po_var at first
     lut_queue = []
@@ -207,6 +277,9 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         ####################################
         # Add LUT 
         ####################################
+        if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
+            if lut_fanin_list[0] not in map_inv_idx:
+                map_inv_idx[lut_fanin_list[0]] = lut_idx
         tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanin_list)
         x_data[lut_idx] = [lut_idx, gate_to_index['LUT'], tt_hex]
         has_loop = False
@@ -235,9 +308,28 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         for clause_idx in selected_clause_index:
             clause_visited[clause_idx] = 1
     
-    if 0 in clause_visited:
-        print('[WARNING] Some clauses are not covered')
-        # raise('[WARNING] Some clauses are not covered')
+    for clause_k in range(len(clause_visited)):
+        if clause_visited[clause_k] == 0:
+            # print('[INFO] Find unassigned clauses, append to PO')
+            unassigned_clause = cnf[clause_k]
+            extra_and_list = []
+            for var in unassigned_clause: 
+                node_idx = abs(var) - 1
+                if var > 0:
+                    extra_and_list.append(node_idx)
+                elif node_idx in map_inv_idx:
+                    extra_and_list.append(map_inv_idx[node_idx])
+                else:
+                    extra_not = len(x_data)
+                    x_data.append([extra_not, gate_to_index['LUT'], '1'])
+                    fanin_list.append([node_idx])
+                    map_inv_idx[node_idx] = extra_not
+                    extra_and_list.append(map_inv_idx[node_idx])
+            x_data, fanin_list, and_idx = add_extra_and(x_data, fanin_list, extra_and_list)
+            extra_po.append(and_idx)
+    
+    # if 0 in clause_visited:
+    #     print('[WARNING] Some clauses are not covered')
         
     # Finish converting 
     print('Finish converting')
@@ -245,48 +337,71 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
 
 def main(cnf_path, output_bench_path):
     # Read CNF 
-    cnf, no_vars = cnf_utils.read_cnf(cnf_path)
-    no_clauses = len(cnf)
-    cnf = cnf_utils.sort_cnf(cnf)
+    init_cnf, no_vars = cnf_utils.read_cnf(cnf_path)
+    init_cnf, no_vars = divide_long_clauses(init_cnf, no_vars, LUT_MAX_FANIN-2)
+    no_clauses = len(init_cnf)
+    init_cnf = cnf_utils.sort_cnf(init_cnf)
+    all_cnf = []
+    all_x_data = []
+    all_fanin_list = []
+    all_po_idx = []
+    
     # Ensure there is at least one unit clause
-    assert len(cnf[0]) == 1, 'CNF does not have unit clause' 
-    
-    # If the unit clause is negative, reverse the literal in CNF
-    po_var = cnf[0][0]
-    reverse_flag = False
-    if po_var < 0:
-        reverse_flag = True
-        for clause_idx in range(len(cnf)):
-            for var_idx in range(len(cnf[clause_idx])):
-                if abs(cnf[clause_idx][var_idx]) == abs(po_var):
-                    cnf[clause_idx][var_idx] = -cnf[clause_idx][var_idx]
-        po_var = -po_var
-    x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf[1:], po_var, no_vars)
-    
-    # Final PO = AND(PO, extra_po)
-    k = 0
-    extra_po.append(po_idx)
-    while k < len(extra_po):
-        extra_and_idx = len(x_data)
-        if k + 3 < len(extra_po):
-            x_data.append([extra_and_idx, gate_to_index['LUT'], '8000'])
-            fanin_list.append([extra_po[k], extra_po[k+1], extra_po[k+2], extra_po[k+3]])
-            extra_po.append(extra_and_idx)
-            k += 4
-        elif k + 2 < len(extra_po):
-            x_data.append([extra_and_idx, gate_to_index['LUT'], '80'])
-            fanin_list.append([extra_po[k], extra_po[k+1], extra_po[k+2]])
-            extra_po.append(extra_and_idx)
-            k += 3
-        elif k + 1 < len(extra_po):
-            x_data.append([extra_and_idx, gate_to_index['LUT'], '8'])
-            fanin_list.append([extra_po[k], extra_po[k+1]])
-            extra_po.append(extra_and_idx)
-            k += 2
+    # assert len(cnf[0]) == 1, 'CNF does not have unit clause' 
+    if len(init_cnf[0]) != 1:        # No unit clause, divide into two CNFs
+        div_var = init_cnf[0][0]
+        cnf_pos = init_cnf + [[div_var]]
+        cnf_neg = init_cnf + [[-div_var]]
+        all_cnf.append(cnf_pos)
+        all_cnf.append(cnf_neg)
+    else:
+        all_cnf.append(init_cnf)
+        
+    # Convert to LUT
+    assert len(all_cnf) == 1 or len(all_cnf) == 2
+    for cnf in all_cnf:
+        # If the unit clause is negative, reverse the literal in CNF
+        po_var = cnf[0][0]
+        reverse_flag = False
+        if po_var < 0:
+            reverse_flag = True
+            for clause_idx in range(len(cnf)):
+                for var_idx in range(len(cnf[clause_idx])):
+                    if abs(cnf[clause_idx][var_idx]) == abs(po_var):
+                        cnf[clause_idx][var_idx] = -cnf[clause_idx][var_idx]
+            po_var = -po_var
+        x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf[1:], po_var, no_vars)
+        
+        # Final PO = AND(PO, extra_po)
+        extra_po.append(po_idx)
+        x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
+        all_x_data.append(x_data)
+        all_fanin_list.append(fanin_list)
+        all_po_idx.append(extra_po[-1])
+        
+    x_data = []
+    fanin_list = []
+    po_indexs = []
+    for k in range(len(all_x_data)):
+        if k == 0:
+            x_data = copy.deepcopy(all_x_data[k])
+            fanin_list = copy.deepcopy(all_fanin_list[k])
+            po_indexs.append(all_po_idx[k])
         else:
-            print('[INFO] PO: %d' % extra_po[k])
-            break
-    
+            for x_data_info in all_x_data[k]:
+                x_data_info[0] = len(all_x_data[0]) + x_data_info[0]
+                x_data.append(x_data_info)
+            for fanin_list_info in all_fanin_list[k]:
+                new_fanin_list_info = []
+                for fanin_idx in fanin_list_info:
+                    new_fanin_list_info.append(len(all_x_data[0]) + fanin_idx)
+                fanin_list.append(new_fanin_list_info)
+            po_indexs.append(len(all_x_data[0]) + all_po_idx[k])
+            # OR gate
+            extra_or_idx = len(x_data)
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'e'])
+            fanin_list.append(po_indexs)
+
     # Statistics
     no_lut = 0
     no_pi = 0
@@ -297,7 +412,8 @@ def main(cnf_path, output_bench_path):
             no_pi += 1
     print('# PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
     print('Save: {}'.format(output_bench_path))
-    clut_utils.save_clut(output_bench_path, x_data, fanin_list)
+    fanout_list = clut_utils.get_fanout_list(x_data, fanin_list)
+    clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list)
 
 if __name__ == '__main__':
     for cnf_path in glob.glob(os.path.join(cnf_dir, '*.cnf')):

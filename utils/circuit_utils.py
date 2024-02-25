@@ -131,59 +131,6 @@ def prob_logic(gate_type, signals):
 
     return zero, one
 
-
-# TODO: correct observability logic
-def obs_prob(x, r, y, input_signals):
-    if x[r][1] == 1 or x[r][1] == 2:
-        obs = y[r]
-        for s in input_signals:
-            for s1 in input_signals:
-                if s != s1:
-                    obs = obs * x[s1][3]
-            if obs < y[s] or y[s] == -1:
-                y[s] = obs
-
-    elif x[r][1] == 3 or x[r][1] == 4:
-        obs = y[r]
-        for s in input_signals:
-            for s1 in input_signals:
-                if s != s1:
-                    obs = obs * x[s1][4]
-            if obs < y[s] or y[s] == -1:
-                y[s] = obs
-
-    elif x[r][1] == 5:
-        obs = y[r]
-        for s in input_signals:
-            if obs < y[s] or y[s] == -1:
-                y[s] = obs
-
-    elif x[r][1] == 6:
-        if len(input_signals) != 2:
-            print('Not support non 2-input XOR Gate')
-            raise
-        # computing for a node
-        obs = y[r]
-        s = input_signals[1]
-        if x[s][3] > x[s][4]:
-            obs = obs * x[s][3]
-        else:
-            obs = obs * x[s][4]
-        y[input_signals[0]] = obs
-
-        # computing for b node
-        obs = y[r]
-        s = input_signals[0]
-        if x[s][3] > x[s][4]:
-            obs = obs * x[s][3]
-        else:
-            obs = obs * x[s][4]
-        y[input_signals[1]] = obs
-
-    return y
-
-
-
 def simulator(x_data, PI_indexes, level_list, fanin_list, num_patterns):
     '''
        Logic simulator
@@ -580,41 +527,6 @@ def generate_prob_cont(x_data, PI_indexes, level_list, fanin_list):
         x_data[i].append(prob[0])
 
     return x_data
-
-
-def generate_prob_obs(x_data, level_list, fanin_list, fanout_list):
-    '''
-        Function to calculate Observability values, i.e. CO.
-        ...
-        Parameters:
-            x_data : list(list((str, int, int))), the node feature matrix with shape [num_nodes, num_node_features], the current dimension of num_node_features is 3, wherein 0th - node_name defined in bench (str); 1st - integer index for the gate type; 2nd - logic level.
-            level_list: logic levels
-            fanin_list: the fanin node indexes for each node
-            fanout_list: the fanout node indexes for each node
-        Return:
-            x_data : list(list((str, int, int))), the node feature matrix with shape [num_nodes, num_node_features], the current dimension of num_node_features is 3, wherein 0th - node_name defined in bench (str); 1st - integer index for the gate type; 2nd - logic level; 3rd - C1; 4th - C0; 5th - CO.
-        '''
-    # Array node into level_list
-
-    y = [-1] * len(x_data)
-
-    POs_indexes = []
-    for idx, nxt in enumerate(fanout_list):
-        if len(nxt) == 0:
-            POs_indexes.append(idx)
-            y[idx] = 1
-
-    for level in range(len(level_list) - 1, -1, -1):
-        for idx in level_list[level]:
-            source_signals = fanin_list[idx]
-            if len(source_signals) > 0:
-                y = obs_prob(x_data, idx, y, source_signals)
-
-    for i, val in enumerate(y):
-        x_data[i].append(val)
-
-    return x_data
-
 
 def dfs_reconvergent_circuit(node_idx, vis, dst_idx, fanout_list, result, x_data):
     if node_idx == dst_idx:
