@@ -81,11 +81,12 @@ def select_cnf(cnf, clause_visited, fanout_idx):
         max_cover_list = clauses_contain_fanout
         max_comb = var_list
     else:
-        # TODO: Check here 
+        # TODO: Need to improve efficiency
+        RAND_SELE_CNT = 1000
         comb_list = list(itertools.combinations(var_list, LUT_MAX_FANIN-2))  # -2 because fanout_idx and possible new fanin
-        if len(comb_list) > 1000: # Random select 1000
+        if len(comb_list) > RAND_SELE_CNT: # Random select RAND_SELE_CNT
             comb_list = np.array(comb_list)
-            indices = np.random.choice(len(comb_list), 1000, replace=False)
+            indices = np.random.choice(len(comb_list), RAND_SELE_CNT, replace=False)
             comb_list = comb_list[indices]
         max_cover_list = []
         max_comb = []
@@ -277,6 +278,11 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         ####################################
         # Add LUT 
         ####################################
+        # print('LUT Index: {:}, # Nodes in Queue: {:}, Remains: {:} / {:} = {:.2f}%'.format(
+        #     lut_idx, len(lut_queue), 
+        #     len(cnf) - sum(clause_visited), len(cnf), 
+        #     (1 - sum(clause_visited) / len(cnf)) * 100
+        # ))
         if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
             if lut_fanin_list[0] not in map_inv_idx:
                 map_inv_idx[lut_fanin_list[0]] = lut_idx
@@ -332,7 +338,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     #     print('[WARNING] Some clauses are not covered')
         
     # Finish converting 
-    print('Finish converting')
+    # print('Finish converting')
     return x_data, fanin_list, po_idx, extra_pi, extra_po
 
 def main(cnf_path, output_bench_path):
@@ -410,8 +416,8 @@ def main(cnf_path, output_bench_path):
             no_lut += 1
         else:
             no_pi += 1
-    print('# PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
-    print('Save: {}'.format(output_bench_path))
+    print('[INFO] # PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
+    print('[INFO] Save: {}'.format(output_bench_path))
     fanout_list = clut_utils.get_fanout_list(x_data, fanin_list)
     clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list)
 

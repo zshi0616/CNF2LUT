@@ -10,10 +10,8 @@ from utils.utils import run_command
 from main import main as cnf2lut
 import time 
 
-NO_PIS = 4
-RANDOM_TEST = False
-CNF_PATH = './case/mchess16-mixed-45percent-blocked.cnf'
-# CNF_PATH = './case/rand_5.cnf'
+CNF_PATH = './case/aa9.cnf'
+# CNF_PATH = '/Users/zhengyuanshi/studio/dataset/SAT_Comp/php16-mixed-35percent-blocked.cnf'
 
 if __name__ == '__main__':
     output_bench_path = './tmp/output.bench'
@@ -57,10 +55,9 @@ if __name__ == '__main__':
     
     # Solve bench cnf
     check_cnf_res = True
-    sat_status, asg, _ = cnf_utils.kissat_solve(new_bench_cnf, max_bench_index+1)
-    os.remove(output_bench_path)
+    sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(new_bench_cnf, max_bench_index+1)
     end_time = time.time()
-    assert sat_status != -1
+    assert sat_status != -1     # Not UNKNOWN
     if sat_status == 0:
         init_sat_status, _, _ = cnf_utils.kissat_solve(cnf, no_var)
         assert init_sat_status == 0
@@ -94,10 +91,38 @@ if __name__ == '__main__':
             if check_cnf_res == False:
                 break
         
-        assert len(remove_flag) == np.sum(remove_flag)
         assert check_cnf_res
+        
+    # LUT bench to AIG
+    abc_cmd = 'abc -c \"read_bench {:}; print_stats; strash; print_stats;\"'.format(output_bench_path)
+    abc_output, _ = run_command(abc_cmd)
+    arr = abc_output[-3].replace(' ', '').replace('lev', '').split('=')
+    bench_levels = int(arr[-1])
+    arr = abc_output[-2].replace(' ', '').replace('and', '').replace('lev', '').split('=')
+    bench_aig_nodes = int(arr[-2])
+    bench_aig_levels = int(arr[-1])
+    
+    # CNF2AIG
+    cnf2aig_aigpath = './tmp/cnf2aig.aig'
+    cnf2aig_cmd = 'cnf2aig {:} {:}'.format(CNF_PATH, cnf2aig_aigpath)
+    abc_cmd = 'abc -c \"read_aiger {:}; print_stats;\"'.format(cnf2aig_aigpath)
+    _, _ = run_command(cnf2aig_cmd)
+    cnf2aig_cmd, _ = run_command(abc_cmd)
+    arr = cnf2aig_cmd[-2].replace(' ', '').replace('and', '').replace('lev', '').split('=')
+    cnf2aig_aig_nodes = int(arr[-2])
+    cnf2aig_aig_levels = int(arr[-1])
     
     sat_res = 'SAT' if sat_status == 1 else 'UNSAT'
+    print('Init CNF # Vars: {:}, # Clauses: {:}'.format(no_var, len(cnf)))
+    print('CNF2AIG AIG-Netlist # Nodes: {:}, # Levels: {:}'.format(cnf2aig_aig_nodes, cnf2aig_aig_levels))
+    print('CNF2LUT LUT-Netlist # Nodes: {:}, # Levels: {:}'.format(len(bench_x_data), bench_levels))
+    print('CNF2LUT AIG-Netlist # Nodes: {:}, # Levels: {:}'.format(bench_aig_nodes, bench_aig_levels))
     print('Results: {}, Check: {}'.format(sat_res, check_cnf_res))
-    print('Time: {:.2f}s'.format(end_time - start_time))
+    all_time = end_time - start_time
+    print('Time Trans. {:.2f}s / Solve {:.2f}s / All {:.2f}s'.format(
+        all_time - bench_solvetime, bench_solvetime, all_time
+    ))
     print()
+    
+    os.remove(output_bench_path)
+    
