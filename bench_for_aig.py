@@ -9,8 +9,8 @@ import utils.simulator as simulator
 from utils.utils import run_command
 from main import main as cnf2lut
 
-NO_PIS = 4
-RANDOM_TEST = True
+NO_PIS = 3
+RANDOM_TEST = False
 
 if __name__ == '__main__':
     init_bench_path = './tmp/init.bench'
@@ -27,6 +27,8 @@ if __name__ == '__main__':
             tt_idx = loop_idx 
         tt = simulator.dec2list(tt_idx, (2 ** NO_PIS))
         tt_hex = simulator.list2hex(tt, 2 ** (NO_PIS-2))
+        if tt_idx != 27:
+            continue
         cmd = 'abc -c \'read_truth {}; strash; write_bench {}; write_aiger {}; print_stats; \''.format(
             tt_hex, init_bench_path, init_aig_path
         )
@@ -53,6 +55,7 @@ if __name__ == '__main__':
         cnf_utils.save_cnf(cnf, len(x_data), cnf_path)
         
         # Convert to LUT
+        assert fanin_list[15] == [4]
         cnf2lut(cnf_path, output_bench_path)
         
         # Parse Bench
@@ -87,11 +90,7 @@ if __name__ == '__main__':
         
         # Solve bench cnf
         sat_status, asg, _ = cnf_utils.kissat_solve(new_bench_cnf, len(bench_x_data))
-        os.remove(init_bench_path)
-        os.remove(init_aig_path)
-        os.remove(cnf_path)
-        os.remove(output_bench_path)
-        
+
         # BCP
         bcp_cnf = copy.deepcopy(cnf)
         remove_flag = [False] * len(bcp_cnf)
@@ -126,3 +125,8 @@ if __name__ == '__main__':
         assert len(remove_flag) == np.sum(remove_flag)
         assert check_cnf_res
         print()
+        
+        os.remove(init_bench_path)
+        os.remove(init_aig_path)
+        os.remove(cnf_path)
+        os.remove(output_bench_path)

@@ -82,30 +82,31 @@ def select_cnf(cnf, clause_visited, fanout_idx):
         max_comb = var_list
     else:
         # TODO: Need to improve efficiency
-        RAND_SELE_CNT = 1000
-        comb_list = list(itertools.combinations(var_list, LUT_MAX_FANIN-2))  # -2 because fanout_idx and possible new fanin
-        if len(comb_list) > RAND_SELE_CNT: # Random select RAND_SELE_CNT
-            comb_list = np.array(comb_list)
-            indices = np.random.choice(len(comb_list), RAND_SELE_CNT, replace=False)
-            comb_list = comb_list[indices]
-        max_cover_list = []
+        var_comb_map = {}
+        for clause_idx in clauses_contain_fanout:
+            clause = cnf[clause_idx]
+            var_comb = []
+            for var in clause:
+                if abs(var) == fanout_var:
+                    continue
+                var_comb.append(abs(var))
+            var_comb = tuple(sorted(var_comb))
+            if var_comb not in var_comb_map:
+                var_comb_map[var_comb] = [clause_idx]
+            else:
+                var_comb_map[var_comb].append(clause_idx)
+        
         max_comb = []
-        for comb in comb_list:
-            cover_list = []
-            for clause_idx in clauses_contain_fanout:
-                clause = cnf[clause_idx]
-                covered = True
-                for var in clause:
-                    if abs(var) == fanout_var:
-                        continue
-                    if abs(var) not in comb:
-                        covered = False
-                        break
-                if covered:
-                    cover_list.append(clause_idx)
-            if len(cover_list) > len(max_cover_list):
-                max_cover_list = cover_list
-                max_comb = comb
+        max_cover_list = []
+        for var_comb in var_comb_map:
+            if len(var_comb) > LUT_MAX_FANIN-2:
+                continue
+            if len(var_comb_map[var_comb]) > len(max_cover_list):
+                max_comb = list(var_comb)
+                max_cover_list = var_comb_map[var_comb]
+            if len(var_comb_map[var_comb]) == len(max_cover_list) and len(var_comb) > len(max_comb):
+                max_comb = list(var_comb)
+                max_cover_list = var_comb_map[var_comb]
         if len(max_cover_list) == 0:
             return None, None, max_cover_list
                     

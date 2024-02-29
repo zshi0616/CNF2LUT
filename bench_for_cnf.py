@@ -10,8 +10,10 @@ from utils.utils import run_command
 from main import main as cnf2lut
 import time 
 
-CNF_PATH = './case/aa9.cnf'
+CNF_PATH = './case/kcolor_4.cnf'
 # CNF_PATH = '/Users/zhengyuanshi/studio/dataset/SAT_Comp/php16-mixed-35percent-blocked.cnf'
+# CNF_PATH = '/Users/zhengyuanshi/studio/dataset/SAT_Comp/brent_9_0.cnf'
+# CNF_PATH = '/Users/zhengyuanshi/studio/dataset/LEC/all_case_cnf/a28.cnf'
 
 if __name__ == '__main__':
     output_bench_path = './tmp/output.bench'
@@ -19,7 +21,9 @@ if __name__ == '__main__':
     
     cnf, no_var = cnf_utils.read_cnf(CNF_PATH)
     # Convert to LUT
+    trans_start_time = time.time()
     cnf2lut(CNF_PATH, output_bench_path)
+    trans_time = time.time() - trans_start_time
     
     # Parse Bench
     bench_x_data, bench_fanin_list, bench_fanout_list = lut_utils.parse_bench(output_bench_path)
@@ -59,8 +63,10 @@ if __name__ == '__main__':
     end_time = time.time()
     assert sat_status != -1     # Not UNKNOWN
     if sat_status == 0:
-        init_sat_status, _, _ = cnf_utils.kissat_solve(cnf, no_var)
+        init_sat_status, _, _ = cnf_utils.kissat_solve(cnf, no_var, args='--time=100')
         assert init_sat_status == 0
+        if init_sat_status == -1:
+            print('Baseline Timeout !!!')
     else:
         # BCP
         bcp_cnf = copy.deepcopy(cnf)
@@ -120,7 +126,7 @@ if __name__ == '__main__':
     print('Results: {}, Check: {}'.format(sat_res, check_cnf_res))
     all_time = end_time - start_time
     print('Time Trans. {:.2f}s / Solve {:.2f}s / All {:.2f}s'.format(
-        all_time - bench_solvetime, bench_solvetime, all_time
+        trans_time, bench_solvetime, all_time
     ))
     print()
     
