@@ -27,8 +27,8 @@ if __name__ == '__main__':
             tt_idx = loop_idx 
         tt = simulator.dec2list(tt_idx, (2 ** NO_PIS))
         tt_hex = simulator.list2hex(tt, 2 ** (NO_PIS-2))
-        if tt_idx != 27:
-            continue
+        # if tt_idx != 27:
+        #     continue
         cmd = 'abc -c \'read_truth {}; strash; write_bench {}; write_aiger {}; print_stats; \''.format(
             tt_hex, init_bench_path, init_aig_path
         )
@@ -55,7 +55,6 @@ if __name__ == '__main__':
         cnf_utils.save_cnf(cnf, len(x_data), cnf_path)
         
         # Convert to LUT
-        assert fanin_list[15] == [4]
         cnf2lut(cnf_path, output_bench_path)
         
         # Parse Bench

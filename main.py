@@ -77,9 +77,15 @@ def select_cnf(cnf, clause_visited, fanout_idx):
 
     # Select maximum covering combination
     var_list = list(var_list.keys())
-    if len(var_list) <= LUT_MAX_FANIN-2:
-        max_cover_list = clauses_contain_fanout
-        max_comb = var_list
+    if len(var_list) == 0:
+        return [], [], []
+    elif len(var_list) <= LUT_MAX_FANIN-2:
+        best_var_comb = var_list
+        best_cover_clauses = clauses_contain_fanout
+        cover_cnf = []
+        for clause_idx in clauses_contain_fanout:
+            cover_cnf.append(cnf[clause_idx])
+        best_tt = subcnf_simulation(cover_cnf, var_list, fanout_var)
     else:
         # TODO: Need to improve efficiency
         var_comb_map = {}
@@ -90,78 +96,53 @@ def select_cnf(cnf, clause_visited, fanout_idx):
                 if abs(var) == fanout_var:
                     continue
                 var_comb.append(abs(var))
-            var_comb = tuple(sorted(var_comb))
-            if var_comb not in var_comb_map:
-                var_comb_map[var_comb] = [clause_idx]
-            else:
-                var_comb_map[var_comb].append(clause_idx)
+            if len(var_comb) > 0:
+                var_comb = tuple(sorted(var_comb))
+                if var_comb not in var_comb_map:
+                    var_comb_map[var_comb] = [clause_idx]
+                else:
+                    var_comb_map[var_comb].append(clause_idx)
         
-        max_comb = []
-        max_cover_list = []
+        best_var_comb = []
+        best_cover_clauses = []
+        best_tt = []
+        best_tt_redundant = 4
         for var_comb in var_comb_map:
             if len(var_comb) > LUT_MAX_FANIN-2:
                 continue
-            if len(var_comb_map[var_comb]) > len(max_cover_list):
-                max_comb = list(var_comb)
-                max_cover_list = var_comb_map[var_comb]
-            if len(var_comb_map[var_comb]) == len(max_cover_list) and len(var_comb) > len(max_comb):
-                max_comb = list(var_comb)
-                max_cover_list = var_comb_map[var_comb]
-        if len(max_cover_list) == 0:
-            return None, None, max_cover_list
-                    
-        ''' Max cover list and max comb are not used in this version, too slow '''
-        # comb_list = list(itertools.combinations(var_list, LUT_MAX_FANIN-2))  # -2 because fanout_idx and possible new fanin
-        # max_cover_list = []
-        # max_comb = []
-        # for comb in comb_list:
-        #     cover_list = []
-        #     for clause_idx in clauses_contain_fanout:
-        #         clause = cnf[clause_idx]
-        #         covered = True
-        #         for var in clause:
-        #             if abs(var) == fanout_var:
-        #                 continue
-        #             if abs(var) not in comb:
-        #                 covered = False
-        #                 break
-        #         if covered:
-        #             cover_list.append(clause_idx)
-        #     if len(cover_list) > len(max_cover_list):
-        #         max_cover_list = cover_list
-        #         max_comb = comb
-    
-    # select clauses
-    var_map = {}
-    for var in max_comb:
-        var_map[var-1] = len(var_map) + 1
-    var_map[fanout_var-1] = len(var_map) + 1
-    map_clauses = []
-    for clause_idx in max_cover_list:
-        clause = cnf[clause_idx]
-        one_clause = []
-        for var in clause:
-            if var > 0:
-                one_clause.append(var_map[var-1])
-            else:
-                one_clause.append(-var_map[-(var+1)])
-        map_clauses.append(one_clause)
-    
-    return var_map, map_clauses, max_cover_list
-
-def subcnf_simulation(map_clauses, var_map, fanout_idx):
+            cover_clauses = []
+            cover_cnf = []
+            for clause_idx in var_comb_map[var_comb]:
+                cover_clauses.append(clause_idx)
+                cover_cnf.append(cnf[clause_idx])
+            tt = subcnf_simulation(cover_cnf, var_comb, fanout_var)
+            redundant_cnt = 0
+            if -1 in tt:
+                redundant_cnt += 1
+            if 2 in tt:
+                redundant_cnt += 1
+            if (redundant_cnt < best_tt_redundant) or \
+                (redundant_cnt == best_tt_redundant and len(cover_clauses) > len(best_cover_clauses)):
+                best_tt_redundant = redundant_cnt
+                best_tt = tt
+                best_cover_clauses = cover_clauses
+                best_var_comb = var_comb
+            
+    return best_var_comb, best_cover_clauses, best_tt
+        
+def subcnf_simulation(clauses, var_list, fanout_var):
     truth_table = []
-    no_vars = len(var_map) - 1
+    no_vars = len(var_list)
     for pattern in range(int(pow(2, no_vars))):
         bin_asg = dec2list(pattern, no_vars)
         asg = []
         for idx in range(len(bin_asg)):
             if bin_asg[idx] == 0:
-                asg.append(-1 * (idx + 1))
+                asg.append(-1 * (var_list[idx]))
             else:
-                asg.append(idx + 1)
-        p_eval = cnf_utils.evalute_cnf(map_clauses, asg + [var_map[fanout_idx]])
-        f_eval = cnf_utils.evalute_cnf(map_clauses, asg + [-var_map[fanout_idx]])
+                asg.append(var_list[idx])
+        p_eval = cnf_utils.evalute_cnf(clauses, asg + [fanout_var])
+        f_eval = cnf_utils.evalute_cnf(clauses, asg + [-fanout_var])
         if p_eval == 0 and f_eval == 0:
             truth_table.append(-1)
         elif p_eval == 0 and f_eval == 1:
@@ -230,13 +211,13 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     while len(lut_queue) > 0:
         lut_idx = lut_queue.pop(0)
         # Select clauses for LUT generation
-        var_map, map_clauses, selected_clause_index = select_cnf(cnf, clause_visited, lut_idx)
-        if len(selected_clause_index) == 0:
+        var_comb, cover_clauses, tt = select_cnf(cnf, clause_visited, lut_idx)
+        if len(var_comb) == 0:
             # print('[DEBUG] LUT %d has no clauses, consider as PI' % lut_idx)
             continue
-        # Complete Simulation 
-        tt = subcnf_simulation(map_clauses, var_map, lut_idx)
-        lut_fanin_list = list(var_map.keys())[:-1]
+        lut_fanin_list = []
+        for var in var_comb:
+            lut_fanin_list.append(var-1)
         
         for idx in lut_fanin_list:
             if not has_lut[idx]:
@@ -312,7 +293,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
             for fanin_idx in ordered_lut_fanin_idx:
                 fanout_list[fanin_idx].append(lut_idx)
         
-        for clause_idx in selected_clause_index:
+        for clause_idx in cover_clauses:
             clause_visited[clause_idx] = 1
     
     for clause_k in range(len(clause_visited)):
