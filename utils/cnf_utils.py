@@ -125,6 +125,8 @@ def read_cnf(cnf_path):
     begin_parse_cnf = False
     iclauses = []
     for line in lines:
+        if line.replace(' ', '')[0] == 'c':
+            continue
         if begin_parse_cnf:
             arr = line.replace('\n', '').split(' ')
             clause = []
@@ -134,8 +136,6 @@ def read_cnf(cnf_path):
             if len(clause) > 0:
                 iclauses.append(clause)
                 
-        elif line.replace(' ', '')[0] == 'c':
-            continue
         elif line.replace(' ', '')[0] == 'p': 
             arr = line.replace('\n', '').split(' ')
             get_cnt = 0

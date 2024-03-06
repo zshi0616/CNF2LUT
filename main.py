@@ -326,7 +326,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
 def main(cnf_path, output_bench_path):
     # Read CNF 
     init_cnf, no_vars = cnf_utils.read_cnf(cnf_path)
-    init_cnf, no_vars = divide_long_clauses(init_cnf, no_vars, LUT_MAX_FANIN-2)
+    # init_cnf, no_vars = divide_long_clauses(init_cnf, no_vars, LUT_MAX_FANIN-2)
     no_clauses = len(init_cnf)
     init_cnf = cnf_utils.sort_cnf(init_cnf)
     all_cnf = []
