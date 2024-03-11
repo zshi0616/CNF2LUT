@@ -87,7 +87,6 @@ def select_cnf(cnf, clause_visited, fanout_idx):
             cover_cnf.append(cnf[clause_idx])
         best_tt = subcnf_simulation(cover_cnf, var_list, fanout_var)
     else:
-        # TODO: Need to improve efficiency
         var_comb_map = {}
         for clause_idx in clauses_contain_fanout:
             clause = cnf[clause_idx]
@@ -186,7 +185,31 @@ def add_extra_and(x_data, fanin_list, and_list):
             break
     return x_data, fanin_list, and_list[k]
 
-def convert_cnf_xdata(cnf, po_var, no_vars):
+def add_extra_or(x_data, fanin_list, or_list):
+    k = 0
+    while k < len(or_list):
+        extra_or_idx = len(x_data)
+        if k + 3 < len(or_list):
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'fffe'])
+            fanin_list.append([or_list[k], or_list[k+1], or_list[k+2], or_list[k+3]])
+            or_list.append(extra_or_idx)
+            k += 4
+        elif k + 2 < len(or_list):
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'fe'])
+            fanin_list.append([or_list[k], or_list[k+1], or_list[k+2]])
+            or_list.append(extra_or_idx)
+            k += 3
+        elif k + 1 < len(or_list):
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'e'])
+            fanin_list.append([or_list[k], or_list[k+1]])
+            or_list.append(extra_or_idx)
+            k += 2
+        else:
+            # print('[INFO] PO: %d' % or_list[k])
+            break
+    return x_data, fanin_list, or_list[k]
+
+def convert_cnf_xdata(cnf, po_var, no_vars, reverse=False):
     x_data = []     # [name, is_lut, tt]
     fanin_list = []
     fanout_list = []
@@ -265,6 +288,11 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         #     len(cnf) - sum(clause_visited), len(cnf), 
         #     (1 - sum(clause_visited) / len(cnf)) * 100
         # ))
+        
+        # Reverse 
+        if reverse and lut_idx == po_idx:
+            tt = [1 - k for k in tt]
+        
         if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
             if lut_fanin_list[0] not in map_inv_idx:
                 map_inv_idx[lut_fanin_list[0]] = lut_idx
@@ -300,22 +328,25 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         if clause_visited[clause_k] == 0:
             # print('[INFO] Find unassigned clauses, append to PO')
             unassigned_clause = cnf[clause_k]
-            extra_and_list = []
-            for var in unassigned_clause: 
+            
+            # TODO: Consider as another circuit AND with this circuit 
+            # Now just append unconnected clauses to PO 
+            extra_or_list = []
+            for var in unassigned_clause:
                 node_idx = abs(var) - 1
                 if var > 0:
-                    extra_and_list.append(node_idx)
+                    extra_or_list.append(node_idx)
                 elif node_idx in map_inv_idx:
-                    extra_and_list.append(map_inv_idx[node_idx])
+                    extra_or_list.append(map_inv_idx[node_idx])
                 else:
                     extra_not = len(x_data)
                     x_data.append([extra_not, gate_to_index['LUT'], '1'])
                     fanin_list.append([node_idx])
                     map_inv_idx[node_idx] = extra_not
-                    extra_and_list.append(map_inv_idx[node_idx])
-            x_data, fanin_list, and_idx = add_extra_and(x_data, fanin_list, extra_and_list)
-            extra_po.append(and_idx)
-    
+                    extra_or_list.append(map_inv_idx[node_idx])
+            x_data, fanin_list, or_idx = add_extra_or(x_data, fanin_list, extra_or_list)
+            extra_po.append(or_idx)
+            
     # if 0 in clause_visited:
     #     print('[WARNING] Some clauses are not covered')
         
@@ -338,8 +369,8 @@ def main(cnf_path, output_bench_path):
     # assert len(cnf[0]) == 1, 'CNF does not have unit clause' 
     if len(init_cnf[0]) != 1:        # No unit clause, divide into two CNFs
         div_var = init_cnf[0][0]
-        cnf_pos = init_cnf + [[div_var]]
-        cnf_neg = init_cnf + [[-div_var]]
+        cnf_pos = [[div_var]] + init_cnf
+        cnf_neg = [[-div_var]] + init_cnf
         all_cnf.append(cnf_pos)
         all_cnf.append(cnf_neg)
     else:
@@ -358,7 +389,13 @@ def main(cnf_path, output_bench_path):
                     if abs(cnf[clause_idx][var_idx]) == abs(po_var):
                         cnf[clause_idx][var_idx] = -cnf[clause_idx][var_idx]
             po_var = -po_var
-        x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf[1:], po_var, no_vars)
+        x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf[1:], po_var, no_vars, reverse_flag)
+        
+        if reverse_flag: 
+            reverse_po_idx = len(x_data)
+            x_data.append([po_idx, gate_to_index['LUT'], '1'])
+            fanin_list.append([po_idx])
+            po_idx = reverse_po_idx
         
         # Final PO = AND(PO, extra_po)
         extra_po.append(po_idx)

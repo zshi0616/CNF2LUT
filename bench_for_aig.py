@@ -9,8 +9,8 @@ import utils.simulator as simulator
 from utils.utils import run_command
 from main import main as cnf2lut
 
-NO_PIS = 3
-RANDOM_TEST = False
+NO_PIS = 4
+RANDOM_TEST = True
 
 if __name__ == '__main__':
     init_bench_path = './tmp/init.bench'
