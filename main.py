@@ -209,7 +209,7 @@ def add_extra_or(x_data, fanin_list, or_list):
             break
     return x_data, fanin_list, or_list[k]
 
-def convert_cnf_xdata(cnf, po_var, no_vars, reverse=False):
+def convert_cnf_xdata(cnf, po_var, no_vars):
     x_data = []     # [name, is_lut, tt]
     fanin_list = []
     fanout_list = []
@@ -289,10 +289,6 @@ def convert_cnf_xdata(cnf, po_var, no_vars, reverse=False):
         #     (1 - sum(clause_visited) / len(cnf)) * 100
         # ))
         
-        # Reverse 
-        if reverse and lut_idx == po_idx:
-            tt = [1 - k for k in tt]
-        
         if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
             if lut_fanin_list[0] not in map_inv_idx:
                 map_inv_idx[lut_fanin_list[0]] = lut_idx
@@ -356,84 +352,18 @@ def convert_cnf_xdata(cnf, po_var, no_vars, reverse=False):
 
 def main(cnf_path, output_bench_path):
     # Read CNF 
-    init_cnf, no_vars = cnf_utils.read_cnf(cnf_path)
-    # init_cnf, no_vars = divide_long_clauses(init_cnf, no_vars, LUT_MAX_FANIN-2)
-    no_clauses = len(init_cnf)
-    init_cnf = cnf_utils.sort_cnf(init_cnf)
-    all_cnf = []
-    all_x_data = []
-    all_fanin_list = []
-    all_po_idx = []
-    
-    # Ensure there is at least one unit clause
-    # assert len(cnf[0]) == 1, 'CNF does not have unit clause' 
-    if len(init_cnf[0]) != 1:        # No unit clause, divide into two CNFs
-        raise ValueError('CNF does not have unit clause, TODO')
-        div_var = init_cnf[0][0]
-        cnf_pos = [[div_var]] + init_cnf
-        cnf_neg = [[-div_var]] + init_cnf
-        all_cnf.append(cnf_pos)
-        all_cnf.append(cnf_neg)
-    else:
-        all_cnf.append(init_cnf)
+    cnf, no_vars = cnf_utils.read_cnf(cnf_path)
+    # cnf, no_vars = divide_long_clauses(cnf, no_vars, LUT_MAX_FANIN-2)
+    no_clauses = len(cnf)
+    cnf = cnf_utils.sort_cnf(cnf)
+    assert len(cnf[0]) == 1
+    po_var = cnf[0][0]
+    x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf[1:], po_var, no_vars)
         
-    # Convert to LUT
-    assert len(all_cnf) == 1 or len(all_cnf) == 2
-    for cnf in all_cnf:
-        # If the unit clause is negative, reverse the literal in CNF
-        po_var = cnf[0][0]
-        reverse_flag = False
-        if po_var < 0:
-            reverse_flag = True
-            for clause_idx in range(len(cnf)):
-                for var_idx in range(len(cnf[clause_idx])):
-                    if abs(cnf[clause_idx][var_idx]) == abs(po_var):
-                        cnf[clause_idx][var_idx] = -cnf[clause_idx][var_idx]
-            po_var = -po_var
-        x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf[1:], po_var, no_vars, reverse_flag)
+    # Final PO = AND(PO, extra_po)
+    extra_po.append(po_idx)
+    x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
         
-        if reverse_flag: 
-            reverse_po_idx = len(x_data)
-            x_data.append([po_idx, gate_to_index['LUT'], '1'])
-            fanin_list.append([po_idx])
-            po_idx = reverse_po_idx
-        # if reverse_flag: 
-        #     add_reverse_po_idx = len(x_data)
-        #     x_data.append([add_reverse_po_idx, gate_to_index['LUT'], x_data[po_idx][2]])
-        #     x_data[po_idx][2] = '1'
-        #     fanin_list.append(fanin_list[po_idx])
-        #     fanin_list[po_idx] = [add_reverse_po_idx]
-        
-        # Final PO = AND(PO, extra_po)
-        extra_po.append(po_idx)
-        x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
-        all_x_data.append(x_data)
-        all_fanin_list.append(fanin_list)
-        all_po_idx.append(extra_po[-1])
-        
-    x_data = []
-    fanin_list = []
-    po_indexs = []
-    for k in range(len(all_x_data)):
-        if k == 0:
-            x_data = copy.deepcopy(all_x_data[k])
-            fanin_list = copy.deepcopy(all_fanin_list[k])
-            po_indexs.append(all_po_idx[k])
-        else:
-            for x_data_info in all_x_data[k]:
-                x_data_info[0] = len(all_x_data[0]) + x_data_info[0]
-                x_data.append(x_data_info)
-            for fanin_list_info in all_fanin_list[k]:
-                new_fanin_list_info = []
-                for fanin_idx in fanin_list_info:
-                    new_fanin_list_info.append(len(all_x_data[0]) + fanin_idx)
-                fanin_list.append(new_fanin_list_info)
-            po_indexs.append(len(all_x_data[0]) + all_po_idx[k])
-            # OR gate
-            extra_or_idx = len(x_data)
-            x_data.append([extra_or_idx, gate_to_index['LUT'], 'e'])
-            fanin_list.append(po_indexs)
-
     # Statistics
     no_lut = 0
     no_pi = 0
@@ -442,8 +372,8 @@ def main(cnf_path, output_bench_path):
             no_lut += 1
         else:
             no_pi += 1
-    print('[INFO] # PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
-    print('[INFO] Save: {}'.format(output_bench_path))
+    # print('[INFO] # PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
+    # print('[INFO] Save: {}'.format(output_bench_path))
     fanout_list = clut_utils.get_fanout_list(x_data, fanin_list)
     clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list)
 

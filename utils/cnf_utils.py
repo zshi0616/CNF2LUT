@@ -115,6 +115,10 @@ def kissat_solve(iclauses, no_vars, tmp_filename=None, args=None):
         
     return sat_status, asg, solvetime
 
+def kissat_solve_file(cnf_path, args=None):
+    cnf, no_vars = read_cnf(cnf_path)
+    return kissat_solve(cnf, no_vars, args=args)
+
 def read_cnf(cnf_path):
     f = open(cnf_path, 'r')
     lines = f.readlines()
@@ -310,3 +314,14 @@ def evalute_cnf(cnf, asg):
         if not is_sat:
             return False
     return True
+
+def reverse_cnf(cnf, reverse_var):
+    assert reverse_var > 0
+    new_cnf = copy.deepcopy(cnf)
+    for clause_idx in range(len(cnf)):
+        for var_idx in range(len(cnf[clause_idx])):
+            if cnf[clause_idx][var_idx] == reverse_var:
+                new_cnf[clause_idx][var_idx] = -reverse_var
+            elif cnf[clause_idx][var_idx] == -reverse_var:
+                new_cnf[clause_idx][var_idx] = reverse_var
+    return new_cnf
