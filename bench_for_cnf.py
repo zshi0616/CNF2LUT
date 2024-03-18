@@ -10,8 +10,8 @@ from utils.utils import run_command
 from main import main as cnf2lut
 import time 
 
-# CNF_PATH = '/Users/zhengyuanshi/studio/dataset/LEC/all_case_cnf/a28.cnf'
-CNF_PATH = './case/fail_04.cnf'
+# CNF_PATH = './case/kcolor_4.cnf'
+CNF_PATH = './case/fail_06.cnf'
 
 if __name__ == '__main__':
     output_bench_path = './tmp/output.bench'

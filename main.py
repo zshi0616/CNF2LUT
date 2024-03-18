@@ -368,6 +368,7 @@ def main(cnf_path, output_bench_path):
     # Ensure there is at least one unit clause
     # assert len(cnf[0]) == 1, 'CNF does not have unit clause' 
     if len(init_cnf[0]) != 1:        # No unit clause, divide into two CNFs
+        raise ValueError('CNF does not have unit clause, TODO')
         div_var = init_cnf[0][0]
         cnf_pos = [[div_var]] + init_cnf
         cnf_neg = [[-div_var]] + init_cnf
@@ -396,6 +397,12 @@ def main(cnf_path, output_bench_path):
             x_data.append([po_idx, gate_to_index['LUT'], '1'])
             fanin_list.append([po_idx])
             po_idx = reverse_po_idx
+        # if reverse_flag: 
+        #     add_reverse_po_idx = len(x_data)
+        #     x_data.append([add_reverse_po_idx, gate_to_index['LUT'], x_data[po_idx][2]])
+        #     x_data[po_idx][2] = '1'
+        #     fanin_list.append(fanin_list[po_idx])
+        #     fanin_list[po_idx] = [add_reverse_po_idx]
         
         # Final PO = AND(PO, extra_po)
         extra_po.append(po_idx)
