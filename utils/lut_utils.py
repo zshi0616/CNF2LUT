@@ -76,7 +76,7 @@ def feature_gen_init(lines):
                 
     return x_data, fanin_list, fanout_list
 
-def convert_cnf(data, fanin_list, po_idx=-1, use_node_name=False):
+def convert_cnf(data, fanin_list, const_1_list=[], use_node_name=False):
     cnf = []
     for idx, x_data_info in enumerate(data): 
         if x_data_info[1] == '':
@@ -117,12 +117,13 @@ def convert_cnf(data, fanin_list, po_idx=-1, use_node_name=False):
                 var = var if int(ele) == 0 else (-1 * var)
                 clause.append(var)
             cnf.append(clause)
-    if po_idx != -1:
+    
+    for const_1_idx in const_1_list:
         if use_node_name:
-            node_name = int(data[po_idx][0].replace('N', ''))
+            node_name = int(data[const_1_idx][0].replace('N', ''))
             cnf.append([node_name + 1])
         else:
-            cnf.append([po_idx + 1])
+            cnf.append([const_1_idx + 1])
             
     return cnf                       
 

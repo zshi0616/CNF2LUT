@@ -21,7 +21,7 @@ def get_fanout_list(x_data, fanin_list):
             fanout_list[fanin_idx].append(idx)
     return fanout_list
 
-def save_clut(filepath, x_data, fanin_list, fanout_list, gate_to_index={'PI': 0, 'LUT': 1, 'AND': 2}):
+def save_clut(filepath, x_data, fanin_list, fanout_list, gate_to_index={'PI': 0, 'LUT': 1, 'AND': 2}, const_1_list=[]):
     pi_list = []
     po_list = []
     for idx in range(len(x_data)):
@@ -38,6 +38,10 @@ def save_clut(filepath, x_data, fanin_list, fanout_list, gate_to_index={'PI': 0,
         f.write('OUTPUT(N' + str(po_idx) + ')\n')
     # for idx in range(len(x_data)):
     #     f.write('OUTPUT(N' + str(idx) + ')\n')
+    
+    # Add const_1 
+    for const_1_idx in const_1_list:
+        f.write('# N{} = 1\n'.format(const_1_idx))
     
     # Save Gate 
     for idx in range(len(x_data)):

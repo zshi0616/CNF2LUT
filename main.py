@@ -298,24 +298,41 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         for k in ordered_lut_fanin_idx:
             # Check slides for loop detection
             if check_loop(fanout_list, lut_idx, k):
-                deloop_idx = len(x_data)
-                x_data.append([deloop_idx, gate_to_index['LUT'], tt_hex])
+                # Add PI
+                deloop_pi = len(x_data)
+                x_data.append([deloop_pi, gate_to_index['PI'], ''])
                 fanin_list.append([])
                 fanout_list.append([])
-                fanin_list[deloop_idx] = ordered_lut_fanin_idx
-                for fanin_idx in ordered_lut_fanin_idx:
-                    fanout_list[fanin_idx].append(deloop_idx)
+                # fanout_list[deloop_pi].append(lut_idx)
+                for fanin_k in range(len(ordered_lut_fanin_idx)):
+                    if ordered_lut_fanin_idx[fanin_k] == k:
+                        ordered_lut_fanin_idx[fanin_k] = deloop_pi
+                
+                # Add XNOR LUT
                 deloop_xnor = len(x_data)
                 x_data.append([deloop_xnor, gate_to_index['LUT'], '9'])
-                fanin_list.append([lut_idx, deloop_idx])
+                fanin_list.append([k, deloop_pi])
                 fanout_list.append([])
                 extra_po.append(deloop_xnor)
                 has_loop = True
-                break
-        if not has_loop:
-            fanin_list[lut_idx] = ordered_lut_fanin_idx
-            for fanin_idx in ordered_lut_fanin_idx:
-                fanout_list[fanin_idx].append(lut_idx)
+                        
+                # deloop_idx = len(x_data)
+                # x_data.append([deloop_idx, gate_to_index['LUT'], tt_hex])
+                # fanin_list.append([])
+                # fanout_list.append([])
+                # fanin_list[deloop_idx] = ordered_lut_fanin_idx
+                # for fanin_idx in ordered_lut_fanin_idx:
+                #     fanout_list[fanin_idx].append(deloop_idx)
+                # deloop_xnor = len(x_data)
+                # x_data.append([deloop_xnor, gate_to_index['LUT'], '9'])
+                # fanin_list.append([lut_idx, deloop_idx])
+                # fanout_list.append([])
+                # extra_po.append(deloop_xnor)
+                # has_loop = True
+                # break
+        fanin_list[lut_idx] = ordered_lut_fanin_idx
+        for fanin_idx in ordered_lut_fanin_idx:
+            fanout_list[fanin_idx].append(lut_idx)
         
         for clause_idx in cover_clauses:
             clause_visited[clause_idx] = 1
@@ -350,15 +367,46 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     # print('Finish converting')
     return x_data, fanin_list, po_idx, extra_pi, extra_po
 
+def cnf2lut(cnf, no_vars):
+    # cnf, no_vars = divide_long_clauses(cnf, no_vars, LUT_MAX_FANIN-2)
+    no_clauses = len(cnf)
+    cnf = cnf_utils.sort_cnf(cnf)
+    
+    po_var = abs(cnf[0][0])
+    x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf, po_var, no_vars)
+    
+    # Constraint 
+    const_1_list = copy.deepcopy(extra_po)
+    extra_po.append(po_idx)
+    x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
+    
+    # Statistics
+    # no_lut = 0
+    # no_pi = 0
+    # for idx in range(len(x_data)):
+    #     if x_data[idx][1] == 1:
+    #         no_lut += 1
+    #     else:
+    #         no_pi += 1
+    # print('[INFO] # PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
+    # print('[INFO] Save: {}'.format(output_bench_path))
+    
+    return x_data, fanin_list, const_1_list
+
 def main(cnf_path, output_bench_path):
     # Read CNF 
     cnf, no_vars = cnf_utils.read_cnf(cnf_path)
     # cnf, no_vars = divide_long_clauses(cnf, no_vars, LUT_MAX_FANIN-2)
     no_clauses = len(cnf)
     cnf = cnf_utils.sort_cnf(cnf)
-    assert len(cnf[0]) == 1
+    
     po_var = cnf[0][0]
-    x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf[1:], po_var, no_vars)
+    x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf, po_var, no_vars)
+    
+    # Constraint 
+    const_1_list = copy.deepcopy(extra_po)
+    extra_po.append(po_idx)
+    x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
         
     # Final PO = AND(PO, extra_po)
     extra_po.append(po_idx)
@@ -374,6 +422,8 @@ def main(cnf_path, output_bench_path):
             no_pi += 1
     # print('[INFO] # PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
     # print('[INFO] Save: {}'.format(output_bench_path))
+    
+    # Save 
     fanout_list = clut_utils.get_fanout_list(x_data, fanin_list)
     clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list)
 
