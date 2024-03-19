@@ -13,7 +13,7 @@ import time
 
 CASE_DIR = './case/'
 CASE_LIST = [
-    # 'fail_04'
+    'mult_op_DEMO1_11_11_TOP18'
 ]
 
 # CASE_DIR = '/Users/zhengyuanshi/studio/dataset/LEC/all_case_cnf/'

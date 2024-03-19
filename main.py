@@ -375,11 +375,6 @@ def cnf2lut(cnf, no_vars):
     po_var = abs(cnf[0][0])
     x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf, po_var, no_vars)
     
-    # Constraint 
-    const_1_list = copy.deepcopy(extra_po)
-    extra_po.append(po_idx)
-    x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
-    
     # Statistics
     # no_lut = 0
     # no_pi = 0
@@ -391,7 +386,7 @@ def cnf2lut(cnf, no_vars):
     # print('[INFO] # PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
     # print('[INFO] Save: {}'.format(output_bench_path))
     
-    return x_data, fanin_list, const_1_list
+    return x_data, fanin_list, extra_po
 
 def main(cnf_path, output_bench_path):
     # Read CNF 
@@ -400,32 +395,15 @@ def main(cnf_path, output_bench_path):
     no_clauses = len(cnf)
     cnf = cnf_utils.sort_cnf(cnf)
     
-    po_var = cnf[0][0]
+    po_var = abs(cnf[0][0])
     x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf, po_var, no_vars)
     
     # Constraint 
-    const_1_list = copy.deepcopy(extra_po)
-    extra_po.append(po_idx)
-    x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
-        
-    # Final PO = AND(PO, extra_po)
-    extra_po.append(po_idx)
-    x_data, fanin_list, _ = add_extra_and(x_data, fanin_list, extra_po)
-        
-    # Statistics
-    no_lut = 0
-    no_pi = 0
-    for idx in range(len(x_data)):
-        if x_data[idx][1] == 1:
-            no_lut += 1
-        else:
-            no_pi += 1
-    # print('[INFO] # PIs: {:}, # LUTs: {:}'.format(no_pi, no_lut))
-    # print('[INFO] Save: {}'.format(output_bench_path))
+    const_1_list = extra_po
     
     # Save 
     fanout_list = clut_utils.get_fanout_list(x_data, fanin_list)
-    clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list)
+    clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list, const_1_list=const_1_list)
 
 if __name__ == '__main__':
     for cnf_path in glob.glob(os.path.join(cnf_dir, '*.cnf')):
