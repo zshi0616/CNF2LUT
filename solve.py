@@ -11,21 +11,23 @@ from utils.utils import run_command
 from main import cnf2lut
 import time 
 
-# CASE_DIR = './case/'
-# CASE_LIST = [
-#     # 'fail_04'
-# ]
-
-CASE_DIR = '/Users/zhengyuanshi/studio/dataset/LEC/all_case_cnf/'
+CASE_DIR = './case/'
 CASE_LIST = [
-    'mult_op_DEMO1_9_9_TOP11', 'c8', 'b31'
+    # 'fail_04'
 ]
+
+# CASE_DIR = '/Users/zhengyuanshi/studio/dataset/LEC/all_case_cnf/'
+# CASE_LIST = [
+#     'mult_op_DEMO1_9_9_TOP11', 'c8', 'b31'
+# ]
 
 # CASE_DIR = '/Users/zhengyuanshi/studio/dataset/SAT_Comp'
 # CASE_LIST = [
 #     # 'mchess16-mixed-35percent-blocked', 
 #     'brent_9_0', 'apx_2_DS-ST'
 # ]
+
+TIMEOUT = 1000
 
 def solve(cnf_path):
     cnf, no_var = cnf_utils.read_cnf(cnf_path)
@@ -61,7 +63,7 @@ def solve(cnf_path):
     
     # Solve bench cnf
     check_cnf_res = True
-    sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(new_bench_cnf, max_bench_index+1)
+    sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(new_bench_cnf, max_bench_index+1, args='--time={}'.format(TIMEOUT))
     assert sat_status != -1     # Not UNKNOWN
     if sat_status == 1:
         # BCP
@@ -114,15 +116,15 @@ if __name__ == '__main__':
     
     for case in CASE_LIST:
         print('[INFO] Case: {:}'.format(case))
-        # CNF2LUT
+        # CNF2LUT: CNF -> LUT -> CNF -> SAT
         cnf_path = os.path.join(CASE_DIR, '{}.cnf'.format(case) )
         res, asg, time_list = solve(cnf_path)
         trans_time, solve_time = time_list
         all_time = solve_time + trans_time
         sat_res = 'SAT' if res else 'UNSAT'
         
-        # Baseline
-        bl_res, _, bl_st = cnf_utils.kissat_solve_file(cnf_path, args='--time=100')
+        # Baseline: CNF -> SAT
+        bl_res, _, bl_st = cnf_utils.kissat_solve_file(cnf_path, args='--time={}'.format(TIMEOUT))
         if bl_res == -1:
             print('[WARNING] Baseline TO')
         else:
