@@ -7,6 +7,7 @@ fig
 output
 bak
 benchmarks
+*.log
 
 # mockturtle
 tools/mockturtle/build
