@@ -6,3 +6,13 @@ case
 fig
 output
 bak
+benchmarks
+
+# mockturtle
+tools/mockturtle/build
+tools/mockturtle/build-*
+tools/mockturtle/.vscode/
+tools/mockturtle/**/*~
+tools/mockturtle/**/.DS_Store
+tools/mockturtle/docs/_build
+tools/mockturtle/docs/doxyxml

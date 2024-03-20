@@ -47,6 +47,17 @@ def feature_gen_init(lines):
             node2idx[node_name] = len(x_data)
             x_data.append([node_name, func])
             
+    # PI and PO
+    PI_list = []
+    PO_list = []
+    for line in lines:
+        if 'INPUT' in line:
+            node_name = line.split("(")[1].split(")")[0]
+            PI_list.append(node2idx[node_name])
+        elif 'OUTPUT' in line:
+            node_name = line.split("(")[1].split(")")[0]
+            PO_list.append(node2idx[node_name])
+            
     no_nodes = len(x_data)
     for idx in range(no_nodes):
         fanin_list.append([])
@@ -74,7 +85,7 @@ def feature_gen_init(lines):
             dst_idx = node2idx[node_name]
             fanin_list[dst_idx] = [-1]
                 
-    return x_data, fanin_list, fanout_list
+    return x_data, fanin_list, fanout_list, PI_list, PO_list
 
 def convert_cnf(data, fanin_list, const_1_list=[], use_node_name=False):
     cnf = []
@@ -173,13 +184,13 @@ def get_level(x_data, fanin_list, fanout_list):
 
 def parse_bench(bench_file):
     data = read_file(bench_file)
-    data, fanin_list, fanout_list = feature_gen_init(data)
-    return data, fanin_list, fanout_list
+    data, fanin_list, fanout_list, PI_list, PO_list = feature_gen_init(data)
+    return data, fanin_list, fanout_list, PI_list, PO_list
     
 def parse_bench_cnf(bench_file):
     data = read_file(bench_file)
-    data, fanin_list, fanout_list = feature_gen_init(data)
-    pi_list, po_list = get_pi_po(fanin_list, fanout_list)
+    data, fanin_list, fanout_list, pi_list, po_list = feature_gen_init(data)
+    # pi_list, po_list = get_pi_po(fanin_list, fanout_list)
     no_var = len(data)
     
     # Check PO
