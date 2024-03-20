@@ -118,7 +118,17 @@ def cnf2lut_samsat_solve(cnf_path):     # TODO
     
     # Solve 
     x_data, fanin_list, fanout_list, PI_list, PO_list = lut_utils.parse_bench(tmp_mapped_bench_path)
-    const_1_list = PO_list
+    f = open(tmp_bench_path, 'r')
+    lines = f.readlines()
+    f.close()
+    const_1_list = []
+    po_k = 0
+    for line in lines: 
+        if 'OUTPUT' in line:
+            if 'Const_1' in line:
+                const_1_list.append(PO_list[po_k])
+            po_k += 1
+    assert len(PO_list) == po_k 
     bench_cnf = lut_utils.convert_cnf(x_data, fanin_list, const_1_list=const_1_list)
     sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(bench_cnf, len(x_data), args='--time={}'.format(TIMEOUT))
     
@@ -188,5 +198,25 @@ def baseline_solve(cnf_path):
 if __name__ == '__main__':
     print('[INFO] Debug wrapper.py ...')
     
-    cnf_path = './case/b30.cnf'
-    cnf2aig_solve(cnf_path)
+    CASE_LIST = [
+        'ac18'
+    ]
+    CNF_DIR = './case'
+    
+    if len(CASE_LIST) == 0:
+        for case_path in glob.glob(os.path.join(CNF_DIR, '*.cnf')):
+            case = os.path.basename(case_path)[:-4]
+            CASE_LIST.append(case)
+    
+    for case_name in CASE_LIST:
+        cnf_path = os.path.join(CNF_DIR, '{}.cnf'.format(case_name))
+        if not os.path.exists(cnf_path):
+            print('[WARNING] {:} not exists'.format(cnf_path))
+            continue
+    
+        res, asg, time_list = cnf2lut_solve(cnf_path)
+        # res, asg, time_list = cnf2lut_samsat_solve(cnf_path)
+        
+        print('[INFO] Case: {:}, Result: {:}'.format(case_name, res))
+        print('Trans.: {:.2f}s, Solve: {:.2f}s'.format(time_list[0], time_list[1]))
+        print()

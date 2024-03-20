@@ -52,6 +52,19 @@ if __name__ == '__main__':
             (bl_time - c2l_time) / bl_time * 100
         ))
         
+        ####################################################################
+        # C2LSAM: CNF -> LUT -> SAM -> CNF -> SAT
+        ####################################################################
+        c2lsam_res, _, c2lsam_timelist = cnf2lut_samsat_solve(cnf_path)
+        c2lsam_time = c2lsam_timelist[0] + c2lsam_timelist[1]
+        if c2lsam_res == -1:
+            print('[WARNING] c2lsam Timeout')
+        assert c2lsam_res == bl_res
+        print('[INFO] C2LSAM Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
+            c2lsam_timelist[0], c2lsam_timelist[1], c2lsam_time, 
+            (bl_time - c2lsam_time) / bl_time * 100
+        ))
+        
         # ####################################################################
         # # C2A: CNF -> AIG -> CNF -> SAT
         # ####################################################################

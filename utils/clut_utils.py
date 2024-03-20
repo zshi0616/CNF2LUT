@@ -39,6 +39,9 @@ def save_clut(filepath, x_data, fanin_list, fanout_list, const_1_list=[]):
             f.write('OUTPUT(N' + str(po_idx) + ')    # Const_1 \n')
         else:
             f.write('OUTPUT(N' + str(po_idx) + ')\n')
+    for idx in range(len(x_data)):
+        if idx in const_1_list and idx not in po_list:
+            f.write('OUTPUT(N' + str(idx) + ')    # Const_1 \n')
     # for idx in range(len(x_data)):
     #     f.write('OUTPUT(N' + str(idx) + ')\n')
     

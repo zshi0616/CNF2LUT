@@ -8,7 +8,7 @@ class Logger(object):
     def __init__(self, log_path):
         time_str = time.strftime('%Y-%m-%d-%H-%M')
         self.log = open(log_path, 'w')
-        self.log.write('Time: {:}\n'.format(time_str))
+        self.log.write('Start Time: {:}\n'.format(time_str))
         self.log.write('='*20 + '\n')
         self.log.flush()
 
