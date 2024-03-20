@@ -18,7 +18,7 @@ sys.setrecursionlimit(100000)
 TIMEOUT = 1000 
 syn_recipe = 'strash; rewrite -lz; balance; rewrite -lz; balance; rewrite -lz; balance; refactor -lz; balance; refactor -lz; balance; '
 mapper_path = './tools/mockturtle/build/examples/my_mapper'
-cnf2aig_path = './tools/cnf2aig/cnf2aig'
+cnf2aig_path = 'cnf2aig'
 
 def cnf2lut_solve(cnf_path, verify=True):
     cnf, no_var = cnf_utils.read_cnf(cnf_path)
