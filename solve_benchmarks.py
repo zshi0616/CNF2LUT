@@ -44,16 +44,16 @@ if __name__ == '__main__':
             xz_path = 'xz -d {}'.format(xz_path)
             _, _ = run_command(xz_path)
             if os.path.exists(cnf_path):
-                # log.write('[INFO] Case Hash: {:}'.format(hash_val))
-                # ####################################################################
-                # # Baseline: CNF -> SAT
-                # ####################################################################
-                # bl_res, _, bl_timelist = baseline_solve(cnf_path)
-                # bl_time = bl_timelist[1]
-                # if bl_res == -1:
-                #     log.write('[WARNING] Baseline Timeout')
-                # log.write('[INFO] Result: {:}'.format(bl_res))
-                # log.write('Baseline Time: {:.2f}s'.format(bl_timelist[1]))
+                log.write('[INFO] Case Hash: {:}'.format(hash_val))
+                ####################################################################
+                # Baseline: CNF -> SAT
+                ####################################################################
+                bl_res, _, bl_timelist = baseline_solve(cnf_path)
+                bl_time = bl_timelist[1]
+                if bl_res == -1:
+                    log.write('[WARNING] Baseline Timeout')
+                log.write('[INFO] Result: {:}'.format(bl_res))
+                log.write('Baseline Time: {:.2f}s'.format(bl_timelist[1]))
                 
                 ####################################################################
                 # C2L: CNF -> LUT -> CNF -> SAT

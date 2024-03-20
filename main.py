@@ -48,33 +48,57 @@ def divide_long_clauses(cnf, no_var, max_length=4):
             res_cnf.append(clause)
     return res_cnf, res_no_var
 
-def select_cnf(cnf, clause_visited, fanout_idx):
+def select_cnf(cnf, var2clauses, clause_visited, fanout_idx):
     fanout_var = fanout_idx + 1
     assert fanout_var > 0, 'fanout_idx must be positive'
     var_list = {}
     clauses_contain_fanout = []
     # Find all clauses containing fanout_idx
-    for clause_idx, clause in enumerate(cnf):
+    for clause_idx in var2clauses[fanout_var]:
         if clause_visited[clause_idx] == 1:
             continue
-        if fanout_var in clause or -fanout_var in clause:
-            clauses_contain_fanout.append(clause_idx)
-            for var in clause:
-                if abs(var) == fanout_var:
-                    continue
-                var_list[abs(var)] = 1
-    # Find other clauses contained by fan-in var
-    for clause_idx, clause in enumerate(cnf):
-        if clause_visited[clause_idx] == 1:
-            continue
-        is_contained = True
+        clauses_contain_fanout.append(clause_idx)
+        clause = cnf[clause_idx]
         for var in clause:
-            if abs(var) not in var_list:
-                is_contained = False
-                break
-        if is_contained:
-            clauses_contain_fanout.append(clause_idx)
-
+            if abs(var) == fanout_var:
+                continue
+            var_list[abs(var)] = 1
+    # Find other clauses contained by fan-in var
+    for var in var_list:
+        for clause_idx in var2clauses[var]:
+            if clause_visited[clause_idx] == 1:
+                continue
+            is_contained = True
+            for clause_var in clause:
+                if abs(clause_var) not in var_list:
+                    is_contained = False
+                    break
+            if is_contained:
+                clauses_contain_fanout.append(clause_idx)
+    
+    # # Slow, Remove
+    # # Find all clauses containing fanout_idx
+    # for clause_idx, clause in enumerate(cnf):
+    #     if clause_visited[clause_idx] == 1:
+    #         continue
+    #     if fanout_var in clause or -fanout_var in clause:
+    #         clauses_contain_fanout.append(clause_idx)
+    #         for var in clause:
+    #             if abs(var) == fanout_var:
+    #                 continue
+    #             var_list[abs(var)] = 1
+    # # Find other clauses contained by fan-in var
+    # for clause_idx, clause in enumerate(cnf):
+    #     if clause_visited[clause_idx] == 1:
+    #         continue
+    #     is_contained = True
+    #     for var in clause:
+    #         if abs(var) not in var_list:
+    #             is_contained = False
+    #             break
+    #     if is_contained:
+    #         clauses_contain_fanout.append(clause_idx)
+    
     # Select maximum covering combination
     var_list = list(var_list.keys())
     if len(var_list) == 0:
@@ -220,6 +244,15 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     po_idx = po_var - 1
     map_inv_idx = {}
     
+    # Prepare CNF 
+    var2clauses = {}
+    for clause_idx, clause in enumerate(cnf):
+        for var in clause:
+            if abs(var) not in var2clauses:
+                var2clauses[abs(var)] = [clause_idx]
+            else:
+                var2clauses[abs(var)].append(clause_idx)
+    
     # Consider the unit clause as PO, generate LUT for po_var at first
     lut_queue = []
     lut_queue.append(po_idx)
@@ -234,7 +267,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     while len(lut_queue) > 0:
         lut_idx = lut_queue.pop(0)
         # Select clauses for LUT generation
-        var_comb, cover_clauses, tt = select_cnf(cnf, clause_visited, lut_idx)
+        var_comb, cover_clauses, tt = select_cnf(cnf, var2clauses, clause_visited, lut_idx)
         if len(var_comb) == 0:
             # print('[DEBUG] LUT %d has no clauses, consider as PI' % lut_idx)
             continue
