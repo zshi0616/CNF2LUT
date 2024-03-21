@@ -13,7 +13,7 @@ def get_parse_args():
     parser = argparse.ArgumentParser()
     
     # Required
-    parser.add_argument('--log_path', type=str, default='./solve_benchmark.log', help='Path of the log')
+    parser.add_argument('--log_path', type=str, default='./solve_benchmarks.log', help='Path of the log')
     
     # Parse and Initialize
     args = parser.parse_args()
@@ -44,45 +44,53 @@ if __name__ == '__main__':
             xz_path = 'xz -d {}'.format(xz_path)
             _, _ = run_command(xz_path)
             if os.path.exists(cnf_path):
+                cnf, no_vars = cnf_utils.read_cnf(cnf_path)
                 log.write('[INFO] Case Hash: {:}'.format(hash_val))
-                ####################################################################
-                # Baseline: CNF -> SAT
-                ####################################################################
-                bl_res, _, bl_timelist = baseline_solve(cnf_path)
-                bl_time = bl_timelist[1]
-                if bl_res == -1:
-                    log.write('[WARNING] Baseline Timeout')
-                log.write('[INFO] Result: {:}'.format(bl_res))
-                log.write('Baseline Time: {:.2f}s'.format(bl_timelist[1]))
-                
-                ####################################################################
-                # C2L: CNF -> LUT -> CNF -> SAT
-                ####################################################################
-                c2l_res, _, c2l_timelist = cnf2lut_solve(cnf_path)
-                c2l_time = c2l_timelist[0] + c2l_timelist[1]
-                if c2l_res == -1:
-                    log.write('[WARNING] c2l Timeout')
-                assert bl_res == -1 or c2l_res == bl_res
-                log.write('[INFO] C2L Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
-                    c2l_timelist[0], c2l_timelist[1], c2l_time, 
-                    (bl_time - c2l_time) / bl_time * 100
-                ))
-                
-                ####################################################################
-                # C2LSAM: CNF -> LUT -> SAM -> CNF -> SAT
-                ####################################################################
-                c2lsam_res, _, c2lsam_timelist = cnf2lut_samsat_solve(cnf_path)
-                c2lsam_time = c2lsam_timelist[0] + c2lsam_timelist[1]
-                if c2lsam_res == -1:
-                    log.write('[WARNING] c2lsam Timeout')
-                assert bl_res == -1 or c2lsam_res == bl_res
-                log.write('[INFO] C2LSAM Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
-                    c2lsam_timelist[0], c2lsam_timelist[1], c2lsam_time, 
-                    (bl_time - c2lsam_time) / bl_time * 100
-                ))
-                
+                log.write('# Vars: {:}, # Clauses: {:}'.format(no_vars, len(cnf)))
+                if len(cnf) < 70000 and no_vars < 30000:
+                    print('[INFO] Solving ... ')
+                    ####################################################################
+                    # Baseline: CNF -> SAT
+                    ####################################################################
+                    bl_res, _, bl_timelist = baseline_solve(cnf_path)
+                    bl_time = bl_timelist[1]
+                    if bl_res == -1:
+                        log.write('[WARNING] Baseline Timeout')
+                    log.write('[INFO] Result: {:}'.format(bl_res))
+                    log.write('Baseline Time: {:.2f}s'.format(bl_timelist[1]))
+                    
+                    ####################################################################
+                    # C2L: CNF -> LUT -> CNF -> SAT
+                    ####################################################################
+                    c2l_res, _, c2l_timelist = cnf2lut_solve(cnf_path)
+                    c2l_time = c2l_timelist[0] + c2l_timelist[1]
+                    if c2l_res == -1:
+                        log.write('[WARNING] c2l Timeout')
+                    assert bl_res == -1 or c2l_res == bl_res
+                    log.write('[INFO] C2L Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
+                        c2l_timelist[0], c2l_timelist[1], c2l_time, 
+                        (bl_time - c2l_time) / bl_time * 100
+                    ))
+                    
+                    ####################################################################
+                    # C2LSAM: CNF -> LUT -> SAM -> CNF -> SAT
+                    ####################################################################
+                    c2lsam_res, _, c2lsam_timelist = cnf2lut_samsat_solve(cnf_path)
+                    c2lsam_time = c2lsam_timelist[0] + c2lsam_timelist[1]
+                    if c2lsam_res == -1:
+                        log.write('[WARNING] c2lsam Timeout')
+                    assert bl_res == -1 or c2lsam_res == bl_res
+                    log.write('[INFO] C2LSAM Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
+                        c2lsam_timelist[0], c2lsam_timelist[1], c2lsam_time, 
+                        (bl_time - c2lsam_time) / bl_time * 100
+                    ))
+                else:
+                    print('[INFO] Too large, skip ')
+                    
                 log.write()
                 os.remove(cnf_path)
+        response = response[pos+19+32:]
+        pos = response.find(key)
     log.close()
         
     
