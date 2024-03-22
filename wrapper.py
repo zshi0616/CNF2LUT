@@ -8,8 +8,10 @@ import utils.circuit_utils as circuit_utils
 import utils.aiger_utils as aiger_utils
 import utils.simulator as simulator
 from utils.utils import run_command
-from main import cnf2lut
-from main import main as cnf2lut_bench
+# from main import cnf2lut
+# from main import main as cnf2lut_bench
+from main_exp import cnf2lut
+from main_exp import main as cnf2lut_bench
 import time 
 
 import sys 
@@ -26,6 +28,8 @@ def cnf2lut_solve(cnf_path, verify=True):
     start_time = time.time()
     bench_x_data, bench_fanin_list, const_1_list = cnf2lut(cnf, no_var)
     trans_time = time.time() - start_time
+    
+    # return 0, None, (trans_time, 0)
 
     # Parse Bench
     for idx in range(len(bench_x_data)):
@@ -54,6 +58,7 @@ def cnf2lut_solve(cnf_path, verify=True):
     
     # Solve bench cnf
     check_cnf_res = True
+    print('Size: ', len(new_bench_cnf), len(bench_x_data))
     sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(new_bench_cnf, max_bench_index+1, args='--time={}'.format(TIMEOUT))
     
     if not verify:
@@ -199,7 +204,11 @@ if __name__ == '__main__':
     print('[INFO] Debug wrapper.py ...')
     
     CASE_LIST = [
-        'ac18'
+        'large_benchmark', 
+        # 'mult_op_DEMO1_3_3_TOP6', 
+        # 'a28', 
+        # 'velev-pipe-o-uns-1-7', 
+        # 'brent_15_0_25', 
     ]
     CNF_DIR = './case'
     

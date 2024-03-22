@@ -304,6 +304,15 @@ def sort_cnf(cnf):
     cnf.sort(key=compare_clause)
     return cnf
 
+def argsort_cnf(cnf):
+    def compare_clause(clause):
+        size = len(clause)
+        min_var = min(abs(lit) for lit in clause)
+        return (size, min_var)
+
+    sorted_indices = sorted(range(len(cnf)), key=lambda i: compare_clause(cnf[i]))
+    return sorted_indices
+
 def evalute_cnf(cnf, asg): 
     for clause in cnf:
         is_sat = False

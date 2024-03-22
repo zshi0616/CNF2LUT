@@ -10,7 +10,7 @@ def get_parse_args():
     parser = argparse.ArgumentParser()
     
     # Required
-    parser.add_argument('--case_dir', type=str, default='./case/', help='Directory of the case')
+    parser.add_argument('--case_dir', type=str, default='./testcase/', help='Directory of the case')
 
     # Parse and Initialize
     args = parser.parse_args()
@@ -25,6 +25,9 @@ if __name__ == '__main__':
     for case_path in glob.glob(os.path.join(args.case_dir, '*.cnf')):
         case = os.path.basename(case_path)[:-4]
         case_list.append(case)
+    tot_bl_time = 0
+    tot_our_solvetime = 0
+    tot_our_transtime = 0
     
     for case in case_list:
         print('[INFO] Case: {:}'.format(case))
@@ -38,6 +41,7 @@ if __name__ == '__main__':
             print('[WARNING] Baseline Timeout')
         print('[INFO] Result: {:}'.format(bl_res))
         print('Baseline Time: {:.2f}s'.format(bl_timelist[1]))
+        tot_bl_time += bl_time
         
         ####################################################################
         # C2L: CNF -> LUT -> CNF -> SAT
@@ -51,6 +55,8 @@ if __name__ == '__main__':
             c2l_timelist[0], c2l_timelist[1], c2l_time, 
             (bl_time - c2l_time) / bl_time * 100
         ))
+        tot_our_solvetime += c2l_timelist[1]
+        tot_our_transtime += c2l_timelist[0]
         
         # ####################################################################
         # # C2LSAM: CNF -> LUT -> SAM -> CNF -> SAT
@@ -80,5 +86,10 @@ if __name__ == '__main__':
         
         
         print()
-        
     
+    print()
+    print('=' * 10 + ' PASS ' + '=' * 10)
+    print('Total Baseline Time: {:.2f}s'.format(tot_bl_time))
+    print('Our Total Trans. Time: {:.2f}s, Solve Time: {:.2f}s'.format(
+        tot_our_transtime, tot_our_solvetime
+    ))

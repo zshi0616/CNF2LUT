@@ -23,8 +23,10 @@ def run_command(command, timeout=-1):
             time.sleep(0.1)
 
         stdout, stderr = process.communicate()
-        stdout = str(stdout).split('\\n')
-        return stdout, time.time() - start_time
+        if len(stderr) > len(stdout):
+            return str(stderr).split('\\n'), time.time() - start_time
+        else:
+            return str(stdout).split('\\n'), time.time() - start_time
     except TimeoutError as e:
         return e, -1
 

@@ -33,11 +33,28 @@ if __name__ == '__main__':
     
     pos = response.find(key)
     while pos != -1:
+        time.sleep(0.5)
         hash_val = response[pos+19: pos+19+32]
         case_url = 'https://benchmark-database.de/file/{}?context=cnf'.format(hash_val)
         xz_path = './tmp/{}.cnf.xz'.format(hash_val)
         cnf_path = './tmp/{}.cnf'.format(hash_val)
         print('[INFO] Download: {} ... '.format(case_url))
+        # Check size 
+        check_size_cmd = 'wget --spider -S {}'.format(case_url)
+        check_info, _ = run_command(check_size_cmd)
+        for line in check_info:
+            if 'Content-Length' in line:
+                byte_size = int(line.split(': ')[1])
+                mb_size = byte_size / 1024 / 1024
+                break
+        if mb_size > 1:
+            print('[INFO] Too large, skip ')
+            print()
+            response = response[pos+19+32:]
+            pos = response.find(key)
+            continue
+        
+        # Download
         download_cmd = 'wget -O {} {}'.format(xz_path, case_url)
         _, _ = run_command(download_cmd)
         if os.path.exists(xz_path):
@@ -47,7 +64,7 @@ if __name__ == '__main__':
                 cnf, no_vars = cnf_utils.read_cnf(cnf_path)
                 log.write('[INFO] Case Hash: {:}'.format(hash_val))
                 log.write('# Vars: {:}, # Clauses: {:}'.format(no_vars, len(cnf)))
-                if len(cnf) < 70000 and no_vars < 30000:
+                if len(cnf) < 60000:
                     print('[INFO] Solving ... ')
                     ####################################################################
                     # Baseline: CNF -> SAT
