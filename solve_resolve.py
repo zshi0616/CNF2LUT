@@ -13,21 +13,23 @@ import time
 
 LUT_MAX_FANIN = 5
 gate_to_index={'PI': 0, 'LUT': 1}
-CASE_DIR = './case/'
+CASE_DIR = './testcase/'
 CASE_LIST = [
-    'mchess16-mixed-45percent-blocked',
-    'mchess16-mixed-35percent-blocked',
-    'php15-mixed-15percent-blocked','php16-mixed-35percent-blocked','php17-mixed-15percent-blocked',
-    '10pipe_q0_k',
-    'brent_9_0',
-    # '46bits_11',
-    '138_apx_2_DS-ST',
-    'apx_0','apx_2_DC-AD','apx_2_DS-ST',
-    'brent_13_0_1','brent_15_0.25','brent_15_0_25','brent_69_0_3','mchess16-mixed-25percent-blocked',
-    'mrpp_6x6_18_20',
-    'php17-mixed-35percent-blocked','sat05-2534','SE_apx_0','velev-pipe-o-uns-1-7','vlsat2_11_42',
-    'vmpc_28.shuffled-as.sat05-1957','WS_400_24_70_10_apx_1_DC-ST','WS_400_24_70_10_apx_2_DC-AD',
-    'WS_400_24_70_10_apx_2_DC-ST'
+    # 'a28'
+    # 'tt_7'
+    # 'mchess16-mixed-45percent-blocked',
+    # 'mchess16-mixed-35percent-blocked',
+    # 'php15-mixed-15percent-blocked','php16-mixed-35percent-blocked','php17-mixed-15percent-blocked',
+    # '10pipe_q0_k',
+    # 'brent_9_0',
+    # # '46bits_11',
+    # '138_apx_2_DS-ST',
+    # 'apx_0','apx_2_DC-AD','apx_2_DS-ST',
+    # 'brent_13_0_1','brent_15_0.25','brent_15_0_25','brent_69_0_3','mchess16-mixed-25percent-blocked',
+    # 'mrpp_6x6_18_20',
+    # 'php17-mixed-35percent-blocked','sat05-2534','SE_apx_0','velev-pipe-o-uns-1-7','vlsat2_11_42',
+    # 'vmpc_28.shuffled-as.sat05-1957','WS_400_24_70_10_apx_1_DC-ST','WS_400_24_70_10_apx_2_DC-AD',
+    # 'WS_400_24_70_10_apx_2_DC-ST'
 ]
 
 # CASE_DIR = '/Users/zhengyuanshi/studio/dataset/LEC/all_case_cn
@@ -55,6 +57,7 @@ def append_cnf(cnf, no_vars):
     extra_pi = []
     po_idx = po_var - 1
     map_inv_idx = {}
+    new_cnf = []
     
     # Consider the unit clause as PO, generate LUT for po_var at first
     lut_queue = []
@@ -119,8 +122,11 @@ def append_cnf(cnf, no_vars):
             extra_po.append(new_fanout_idx)
             # add_fanout_tt_hex, ordered_lut_fanin_idx = create_lut(add_fanout_tt, lut_fanin_list)
             # tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanin_list)
+            
         subcnf_tt = []
         for tt_idx, tt_value in enumerate(tt): 
+            if tt_value == 2:
+                continue
             tt_bin = bin(tt_idx)[2:]
             padded_binary_string = tt_bin.zfill(len(lut_fanin_list))
             binary_array = [int(bit) for bit in padded_binary_string]
@@ -130,6 +136,8 @@ def append_cnf(cnf, no_vars):
             subcnf_tt.append(clause)
         subcnf_tt_addfo = []
         for tt_idx, tt_value in enumerate(add_fanout_tt): 
+            if tt_value == 2:
+                continue
             tt_bin = bin(tt_idx)[2:]
             padded_binary_string = tt_bin.zfill(len(lut_fanin_list))
             binary_array = [int(bit) for bit in padded_binary_string]
@@ -137,6 +145,7 @@ def append_cnf(cnf, no_vars):
             clause = [x * (y+1) for x, y in zip(tt_array, lut_fanin_list)]
             clause.append(new_fanout_idx+1 if tt_value==1 else -1*(new_fanout_idx+1) )
             subcnf_tt_addfo.append(clause)
+        
         subcnf = subcnf_tt + subcnf_tt_addfo
         # BCP
         remove_flag = [False] * len(subcnf)
@@ -155,11 +164,17 @@ def append_cnf(cnf, no_vars):
         # for cover_idx, clause_idx in enumerate(cover_clauses):
         #     cnf.pop(clause_idx)
         #     clause_visited.pop(clause_idx)
-        cnf+=bcp_subcnf
-        clause_visited += len(bcp_subcnf)*[1]
+        # cnf+=bcp_subcnf
+        # clause_visited += len(bcp_subcnf)*[1]
+        new_cnf += bcp_subcnf
         # has_lut += len(bcp_subcnf)*[0]
         # print()
-    return cnf
+        
+    
+    for clause_idx in range(len(cnf)):
+        if clause_visited[clause_idx] == 0:
+            new_cnf.append(cnf[clause_idx])
+    return new_cnf
 
 def solve(cnf_path):
     cnf, no_var = cnf_utils.read_cnf(cnf_path)
