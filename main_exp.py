@@ -11,15 +11,26 @@ import utils.clut_utils as clut_utils
 import utils.circuit_utils as circuit_utils
 from utils.simulator import dec2list, list2hex
 from itertools import combinations
+from line_profiler import LineProfiler
 
 cnf_dir = './case/'
 NAME_LIST = [
-    'l3'
+    # 'brent_13_0_1'
+    # 'a28'
+    # 'tt_7'
+    'mchess16-mixed-45percent-blocked'
 ]
 
 LUT_MAX_FANIN = 5
 gate_to_index={'PI': 0, 'LUT': 1}
 output_dir = './output/'
+
+def var_count(cnf, no_vars):
+    var_cnts = [0] * (no_vars + 1)
+    for clause in cnf:
+        for var in clause:
+            var_cnts[abs(var)] += 1
+    return var_cnts
 
 def check_loop(fanout_list, src, dst):
     visited = [0] * len(fanout_list)
@@ -206,6 +217,14 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     extra_pi = []
     po_idx = po_var - 1
     map_inv_idx = {}
+    allfo_dict = {}
+    for idx in range(no_vars):
+        allfo_dict[idx] = []
+    
+    # Assign the var with maximum occurrence as PO
+    var_cnts = var_count(cnf, no_vars)
+    var_arglist = np.argsort(var_cnts)[::-1]
+    # po_idx = var_arglist[0] - 1
     
     # Preprocess 
     var_comb_map, var2varcomb_map = get_var_comb_map(cnf)
@@ -247,6 +266,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
             fanin_list.append([])
             fanout_list.append([])
             lut_fanin_list.append(new_fanin_idx)
+            allfo_dict[len(x_data)] = []
             new_tt = []
             for k in range(len(tt)):
                 if tt[k] == 2:
@@ -268,28 +288,24 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
             x_data.append([new_fanout_idx, gate_to_index['LUT'], tt_hex])
             fanout_list.append([])
             fanin_list.append([])
+            allfo_dict[len(x_data)] = []
             fanin_list[new_fanout_idx] = ordered_lut_fanin_idx
             for fanin_idx in ordered_lut_fanin_idx:
                 fanout_list[fanin_idx].append(new_fanout_idx)
-                
-        ####################################
-        # Add LUT 
-        ####################################
-        # print('LUT Index: {:}, # Nodes in Queue: {:}, Remains: {:} / {:} = {:.2f}%'.format(
-        #     lut_idx, len(lut_queue), 
-        #     len(cnf) - sum(clause_visited), len(cnf), 
-        #     (1 - sum(clause_visited) / len(cnf)) * 100
-        # ))
         
         if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
             if lut_fanin_list[0] not in map_inv_idx:
                 map_inv_idx[lut_fanin_list[0]] = lut_idx
         tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanin_list)
         x_data[lut_idx] = [lut_idx, gate_to_index['LUT'], tt_hex]
-        has_loop = False
+        
+        for fanin_idx in ordered_lut_fanin_idx:         # Record the all fanout idx of the node to avoid loop 
+            allfo_dict[fanin_idx] = allfo_dict[lut_idx] + [lut_idx]
+        
         for k in ordered_lut_fanin_idx:
             # Check slides for loop detection
-            if check_loop(fanout_list, lut_idx, k):
+            # if check_loop(fanout_list, lut_idx, k):
+            if k in allfo_dict[lut_idx]:
                 # Add PI
                 deloop_pi = len(x_data)
                 x_data.append([deloop_pi, gate_to_index['PI'], ''])
@@ -371,6 +387,14 @@ def main(cnf_path, output_bench_path):
     cnf = cnf_utils.sort_cnf(cnf)
     
     po_var = abs(cnf[0][0])
+    
+    # Time analysis   TODO
+    p = LineProfiler()
+    p_wrap = p(convert_cnf_xdata)
+    p_wrap(cnf, po_var, no_vars)
+    p.print_stats()
+    exit(0)
+    
     x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf, po_var, no_vars)
     
     # Constraint 
@@ -387,9 +411,7 @@ if __name__ == '__main__':
             continue
         print('Processing %s' % cnf_name)
         output_path = os.path.join(output_dir, cnf_name + '.bench')
-        main(cnf_path, output_path)
         
-        
-    
+        main(cnf_path, output_path)    
         
     
