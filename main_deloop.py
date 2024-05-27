@@ -14,12 +14,15 @@ from utils.simulator import dec2list, list2hex
 from itertools import combinations
 from line_profiler import LineProfiler
 
+import sys
+sys.setrecursionlimit(100000)
+
 cnf_dir = './case/'
 NAME_LIST = [
-    # 'brent_13_0_1'
+    'brent_13_0_1', 'brent_15_0_25', 'h5'
     # 'a28'
     # 'tt_7'
-    'mchess16-mixed-45percent-blocked'
+    # 'mchess16-mixed-45percent-blocked'
 ]
 
 LUT_MAX_FANIN = 5
@@ -32,19 +35,6 @@ def var_count(cnf, no_vars):
         for var in clause:
             var_cnts[abs(var)] += 1
     return var_cnts
-
-def check_loop(fanout_list, src, dst):
-    visited = [0] * len(fanout_list)
-    queue = [src]
-    while len(queue) > 0:
-        cur = queue.pop(0)
-        if cur == dst:
-            return True
-        visited[cur] = 1
-        for fanout in fanout_list[cur]:
-            if visited[fanout] == 0:
-                queue.append(fanout)
-    return False
 
 def divide_long_clauses(cnf, no_var, max_length=4):
     res_cnf = []
@@ -215,11 +205,11 @@ def add_extra_or(x_data, fanin_list, fanout_list, or_list):
     return x_data, fanin_list, fanout_list, or_list[k]
 
 def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, node):
-    for next_node in fanin_list[node]:
-        if 0 <= next_node < no_vars:
-            if not visited[node][next_node]:
-                visited[node][next_node] = True
-                traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list,extra_pi, extra_po, next_node)
+    for k, fanin_node in enumerate(fanin_list[node]):
+        if 0 <= fanin_node < no_vars:
+            if not visited[node][k]:
+                visited[node][k] = True
+                traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list,extra_pi, extra_po, fanin_node)
             else:
                 # Add PI 
                 deloop_pi = len(x_data)
@@ -228,17 +218,17 @@ def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, 
                 fanout_list.append([])
                 fanout_list[deloop_pi].append(node)
                 for fanin_k in range(len(fanin_list[node])):
-                    if fanin_list[node][fanin_k] == next_node:
+                    if fanin_list[node][fanin_k] == fanin_node:
                         fanin_list[node][fanin_k] = deloop_pi
                 
                 # Add XNOR LUT 
                 deloop_xnor = len(x_data)
                 x_data.append([deloop_xnor, gate_to_index['LUT'], '9'])
-                fanin_list.append([next_node, deloop_pi])
+                fanin_list.append([fanin_node, deloop_pi])
                 fanout_list.append([])
-                for fanout_k in range(len(fanout_list[next_node])):
-                    if fanout_list[next_node][fanout_k] == node:
-                        fanout_list[next_node][fanout_k] = deloop_xnor
+                for fanout_k in range(len(fanout_list[fanin_node])):
+                    if fanout_list[fanin_node][fanout_k] == node:
+                        fanout_list[fanin_node][fanout_k] = deloop_xnor
                 fanout_list[deloop_pi].append(deloop_xnor)
                 extra_po.append(deloop_xnor)
                         
@@ -255,7 +245,6 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     # allfo_dict = {}
     # for idx in range(no_vars):
     #     allfo_dict[idx] = []
-    visited = [[False] * no_vars for _ in range(no_vars)]
     
     # Assign the var with maximum occurrence as PO
     var_cnts = var_count(cnf, no_vars)
@@ -364,6 +353,12 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
                     extra_or_list.append(map_inv_idx[node_idx])
             x_data, fanin_list, fanout_list, or_idx = add_extra_or(x_data, fanin_list, fanout_list, extra_or_list)
             extra_po.append(or_idx)
+    
+    
+    # Check loop 
+    visited = []
+    for idx in range(no_vars):
+        visited.append([False] * len(fanin_list[idx]))
             
     traverse_graph(
         no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_idx) # last_node initialized as po_idx

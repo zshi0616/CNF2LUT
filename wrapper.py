@@ -9,9 +9,11 @@ import utils.aiger_utils as aiger_utils
 import utils.simulator as simulator
 from utils.utils import run_command
 
-# Change here !!! 
-from main_dfs import cnf2lut
-from main_dfs import main as cnf2lut_bench
+# Change here !!! (default: main_deloop.py)
+from main_deloop import cnf2lut
+from main_deloop import main as cnf2lut_bench
+
+
 import time 
 
 import sys 
