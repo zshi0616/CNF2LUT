@@ -70,34 +70,18 @@ def cnf2lut_solve(cnf_path, verify=True):
         return -1, None, (trans_time, bench_solvetime)
     
     elif sat_status == 1:
-        # BCP
-        bcp_cnf = copy.deepcopy(cnf)
-        remove_flag = [False] * len(bcp_cnf)
-        for var in range(1, no_var+1):
-            var_value = asg[var-1]
-            for clause_k, clause in enumerate(bcp_cnf):
-                if remove_flag[clause_k]:
-                    continue
-                if var_value == 1:
-                    if var in clause:
-                        remove_flag[clause_k] = True
-                        continue
-                    if -var in clause:
-                        clause.remove(-var)
-                else:
-                    if -var in clause:
-                        remove_flag[clause_k] = True
-                        continue
-                    if var in clause:
-                        clause.remove(var)
-        
-            for clause_k, clause in enumerate(bcp_cnf):
-                if len(clause) == 0:
-                    print('{:}, UNSAT'.format(var))
-                    check_cnf_res = False
+        # BCP 
+        sat_flag = [0] * len(cnf)
+        for clause_k, clause in enumerate(cnf):
+            for var in clause:
+                if var > 0 and asg[abs(var)-1] == 1:
+                    sat_flag[clause_k] = 1
                     break
-            if check_cnf_res == False:
-                break
+                elif var < 0 and asg[abs(var)-1] == 0:
+                    sat_flag[clause_k] = 1
+                    break
+        if np.sum(sat_flag) != len(cnf):
+            check_cnf_res = False
         
         assert check_cnf_res
         return 1, asg, (trans_time, bench_solvetime)

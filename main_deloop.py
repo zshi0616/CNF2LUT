@@ -19,7 +19,9 @@ sys.setrecursionlimit(100000)
 
 cnf_dir = './case/'
 NAME_LIST = [
-    'brent_13_0_1', 'brent_15_0_25', 'h5'
+    # 'c17_5_-1'
+    'a26', 'a28', 'b30',    # SAT
+    # 'brent_13_0_1', 'brent_15_0_25', 'h5'
     # 'a28'
     # 'tt_7'
     # 'mchess16-mixed-45percent-blocked'
@@ -395,13 +397,13 @@ def main(cnf_path, output_bench_path):
     # Main 
     convert_starttime = time.time()
     x_data, fanin_list, extra_po = cnf2lut(cnf, no_vars)
-    print('convert time:{}'.format(time.time() - convert_starttime))
+    print('convert time: {:.4f} s'.format(time.time() - convert_starttime))
     
     # Save 
     fanout_list = clut_utils.get_fanout_list(x_data, fanin_list)
     saveclut_starttime = time.time()
     clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list, const_1_list=extra_po)
-    print('saveclut time:{}'.format(time.time() - saveclut_starttime))
+    print('saveclut time: {:.4f} s'.format(time.time() - saveclut_starttime))
 
 if __name__ == '__main__':
     # x_data = [[0, gate_to_index['PI'], 0], [0, gate_to_index['LUT'], '1'], [0, gate_to_index['LUT'], '1'], 
@@ -425,3 +427,4 @@ if __name__ == '__main__':
         
         main(cnf_path, output_path)    
         print(output_path)
+        print()

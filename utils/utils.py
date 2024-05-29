@@ -8,27 +8,34 @@ def read_npz_file(filename):
     data = np.load(filename, allow_pickle=True)
     return data
 
-def run_command(command, timeout=-1):
-    try: 
-        command_list = shlex.split(command)
-        process = subprocess.Popen(command_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+# def run_command(command, timeout=-1):
+#     try: 
+#         command_list = shlex.split(command)
+#         process = subprocess.Popen(command_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        start_time = time.time()
-        while process.poll() is None:
-            if timeout > 0 and time.time() - start_time > timeout:
-                process.terminate()
-                process.wait()
-                raise TimeoutError(f"Command '{command}' timed out after {timeout} seconds")
+#         start_time = time.time()
+#         while process.poll() is None:
+#             if timeout > 0 and time.time() - start_time > timeout:
+#                 process.terminate()
+#                 process.wait()
+#                 raise TimeoutError(f"Command '{command}' timed out after {timeout} seconds")
 
-            time.sleep(0.1)
+#             time.sleep(0.1)
 
-        stdout, stderr = process.communicate()
-        if len(stderr) > len(stdout):
-            return str(stderr).split('\\n'), time.time() - start_time
-        else:
-            return str(stdout).split('\\n'), time.time() - start_time
-    except TimeoutError as e:
-        return e, -1
+#         stdout, stderr = process.communicate()
+#         if len(stderr) > len(stdout):
+#             return str(stderr).split('\\n'), time.time() - start_time
+#         else:
+#             return str(stdout).split('\\n'), time.time() - start_time
+#     except TimeoutError as e:
+#         return e, -1
+
+def run_command(command):
+    start_time = time.time()
+    stdout = os.popen(command)
+    stdout = stdout.readlines()
+    runtime = time.time() - start_time
+    return stdout, runtime
 
 def has_common_element(list_a, list_b):
     for a in list_a:
