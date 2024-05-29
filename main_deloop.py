@@ -206,7 +206,41 @@ def add_extra_or(x_data, fanin_list, fanout_list, or_list):
             break
     return x_data, fanin_list, fanout_list, or_list[k]
 
-def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, node):
+def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, start_node):
+    # BFS 
+    q = []
+    q.append(start_node)
+    while len(q) > 0:
+        node = q.pop(0)
+        for k, fanin_node in enumerate(fanin_list[node]):
+            if 0 <= fanin_node < no_vars:
+                if not visited[node][k]:
+                    visited[node][k] = True
+                    q.append(fanin_node)
+                else:
+                    # Add PI 
+                    deloop_pi = len(x_data)
+                    x_data.append([deloop_pi, gate_to_index['PI'], ''])
+                    fanin_list.append([])
+                    fanout_list.append([])
+                    fanout_list[deloop_pi].append(node)
+                    for fanin_k in range(len(fanin_list[node])):
+                        if fanin_list[node][fanin_k] == fanin_node:
+                            fanin_list[node][fanin_k] = deloop_pi
+                    
+                    # Add XNOR LUT 
+                    deloop_xnor = len(x_data)
+                    x_data.append([deloop_xnor, gate_to_index['LUT'], '9'])
+                    fanin_list.append([fanin_node, deloop_pi])
+                    fanout_list.append([])
+                    for fanout_k in range(len(fanout_list[fanin_node])):
+                        if fanout_list[fanin_node][fanout_k] == node:
+                            fanout_list[fanin_node][fanout_k] = deloop_xnor
+                    fanout_list[deloop_pi].append(deloop_xnor)
+                    extra_po.append(deloop_xnor)
+    
+    '''
+    # DFS
     for k, fanin_node in enumerate(fanin_list[node]):
         if 0 <= fanin_node < no_vars:
             if not visited[node][k]:
@@ -233,6 +267,7 @@ def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, 
                         fanout_list[fanin_node][fanout_k] = deloop_xnor
                 fanout_list[deloop_pi].append(deloop_xnor)
                 extra_po.append(deloop_xnor)
+    '''
                         
 def convert_cnf_xdata(cnf, po_var, no_vars):
     x_data = []     # [name, is_lut, tt]
@@ -247,11 +282,6 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     # allfo_dict = {}
     # for idx in range(no_vars):
     #     allfo_dict[idx] = []
-    
-    # Assign the var with maximum occurrence as PO
-    var_cnts = var_count(cnf, no_vars)
-    var_arglist = np.argsort(var_cnts)[::-1]
-    # po_idx = var_arglist[0] - 1
     
     # Preprocess 
     var_comb_map, var2varcomb_map = get_var_comb_map(cnf)
@@ -332,6 +362,12 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         for clause_idx in cover_clauses:
             clause_visited[clause_idx] = 1
     
+    # [DEBUG] CNF2LUT Convert Ratio 
+    print('[DEBUG] CNF2LUT Convert Ratio: {:} / {:} = {:.2f}%'.format(
+        np.sum(clause_visited), len(clause_visited), np.sum(clause_visited) / len(clause_visited) * 100
+    ))
+    
+    
     for clause_k in range(len(clause_visited)):
         if clause_visited[clause_k] == 0:
             # print('[INFO] Find unassigned clauses, append to PO')
@@ -372,7 +408,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
 def cnf2lut(cnf, no_vars):
     # Sort CNF
     no_clauses = len(cnf)
-    cnf = cnf_utils.sort_cnf(cnf)
+    # cnf = cnf_utils.sort_cnf(cnf)
     
     # Assign the var with maximum occurrence as PO
     var_cnts = var_count(cnf, no_vars)

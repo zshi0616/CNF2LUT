@@ -37,7 +37,12 @@ def cnf2lut_solve(cnf_path, verify=True):
     for idx in range(len(bench_x_data)):
         bench_x_data[idx] = ['N{:}'.format(idx), bench_x_data[idx][2]]
     bench_cnf = lut_utils.convert_cnf(bench_x_data, bench_fanin_list, const_1_list=const_1_list)
-
+    
+    # Solve without verification 
+    if not verify:
+        sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(bench_cnf, len(bench_x_data), args='--time={}'.format(TIMEOUT))
+        return sat_status, asg, (trans_time, bench_solvetime)
+    
     # Matching 
     map_bench_init = {}
     max_bench_index = 0
@@ -62,9 +67,6 @@ def cnf2lut_solve(cnf_path, verify=True):
     check_cnf_res = True
     print('Size: ', len(new_bench_cnf), len(bench_x_data))
     sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(new_bench_cnf, max_bench_index+1, args='--time={}'.format(TIMEOUT))
-    
-    if not verify:
-        return sat_status, asg, (trans_time, bench_solvetime)
     
     if sat_status == -1:
         return -1, None, (trans_time, bench_solvetime)

@@ -8,8 +8,9 @@ from wrapper import *
 
 CASE_DIR = './case'
 CASE_LIST = [
-    'a26', 'a28', 'b30'
+    # 'a26', 'a28', 'b30'
     # 'c17_5_-1'
+    'brent_9_0', 'brent_13_0_1', 'brent_15_0_25'
 ]
 
 if __name__ == '__main__':
