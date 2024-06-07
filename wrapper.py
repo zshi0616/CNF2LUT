@@ -13,7 +13,6 @@ from utils.utils import run_command
 from main_deloop import cnf2lut
 from main_deloop import main as cnf2lut_bench
 
-
 import time 
 
 import sys 
@@ -28,7 +27,7 @@ def cnf2lut_solve(cnf_path, verify=True):
     cnf, no_var = cnf_utils.read_cnf(cnf_path)
     cnf = cnf_utils.sort_cnf(cnf)
     start_time = time.time()
-    bench_x_data, bench_fanin_list, const_1_list = cnf2lut(cnf, no_var)
+    bench_x_data, bench_fanin_list, po_list, const_1_list = cnf2lut(cnf, no_var)
     trans_time = time.time() - start_time
     
     # return 0, None, (trans_time, 0)
@@ -65,6 +64,7 @@ def cnf2lut_solve(cnf_path, verify=True):
     
     # Solve bench cnf
     check_cnf_res = True
+    print('Original Size: ', len(cnf), no_var)
     print('Size: ', len(new_bench_cnf), len(bench_x_data))
     sat_status, asg, bench_solvetime = cnf_utils.kissat_solve(new_bench_cnf, max_bench_index+1, args='--time={}'.format(TIMEOUT))
     

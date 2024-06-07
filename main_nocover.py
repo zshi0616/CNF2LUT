@@ -14,31 +14,24 @@ from utils.simulator import dec2list, list2hex
 from itertools import combinations
 from line_profiler import LineProfiler
 
-import sys
-sys.setrecursionlimit(100000)
-
 cnf_dir = './case/'
 NAME_LIST = [
     # 'mult_op_DEMO1_3_3_TOP6'
-    # 'test'
-    # 'c17_5_-1'
+    'c17_5_-1'
     # 'a26', 'a28', 'b30',    # SAT
-    # 'brent_13_0_1', 'brent_15_0_25', 
+    # 'brent_13_0_1', 'brent_15_0_25', 'h5'
     # 'a28'
     # 'tt_7'
     # 'mchess16-mixed-45percent-blocked'
-    'rand_01'
 ]
 
 LUT_MAX_FANIN = 5
 gate_to_index={'PI': 0, 'LUT': 1}
 output_dir = './output/'
 
-def var_count(cnf, no_vars, clause_visited=[]):
+def var_count(cnf, no_vars):
     var_cnts = [0] * (no_vars + 1)
-    for clause_k, clause in enumerate(cnf):
-        if len(clause_visited) > 0 and clause_visited[clause_k] == 1:
-            continue
+    for clause in cnf:
         for var in clause:
             var_cnts[abs(var)] += 1
     return var_cnts
@@ -95,7 +88,7 @@ def get_var_comb_map(cnf):
                 
     return var_comb_map, var2varcomb_map
 
-def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
+def select_cnf(cnf, fanout_idx, var_comb_map, var2varcomb_map):
     fanout_var = fanout_idx + 1
     assert fanout_var > 0, 'fanout_idx must be positive'
     if fanout_var not in var2varcomb_map:
@@ -113,8 +106,6 @@ def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
         tmp_var_comb = list(set(res_var_comb + var_comb_wo_fanout))
         if len(tmp_var_comb) <= LUT_MAX_FANIN+1:
             for clause_idx in var_comb_map[var_comb]:
-                if clause_visited[clause_idx] == 1:
-                    continue
                 res_var_comb = tmp_var_comb
                 res_clauses_index.append(clause_idx)
                 res_clauses.append(cnf[clause_idx])
@@ -211,11 +202,10 @@ def add_extra_or(x_data, fanin_list, fanout_list, or_list):
             break
     return x_data, fanin_list, fanout_list, or_list[k]
 
-def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_list):
+def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, start_node):
     # BFS 
     q = []
-    for start_node in po_list:
-        q.append(start_node)
+    q.append(start_node)
     while len(q) > 0:
         node = q.pop(0)
         for k, fanin_node in enumerate(fanin_list[node]):
@@ -275,7 +265,7 @@ def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, 
                 extra_po.append(deloop_xnor)
     '''
                         
-def convert_cnf_xdata(cnf, no_vars):
+def convert_cnf_xdata(cnf, po_var, no_vars):
     x_data = []     # [name, is_lut, tt]
     fanin_list = []
     fanout_list = []
@@ -283,12 +273,19 @@ def convert_cnf_xdata(cnf, no_vars):
     clause_visited = [0] * len(cnf)
     extra_po = []
     extra_pi = []
-    po_list = []
+    po_idx = po_var - 1
     map_inv_idx = {}
-    last_coverage = -1
+    # allfo_dict = {}
+    # for idx in range(no_vars):
+    #     allfo_dict[idx] = []
     
     # Preprocess 
     var_comb_map, var2varcomb_map = get_var_comb_map(cnf)
+    
+    # Consider the unit clause as PO, generate LUT for po_var at first
+    lut_queue = []
+    for po_idx in range(0, no_vars):
+        lut_queue.append(po_idx)
     
     # Create gate 
     for k in range(1, no_vars + 1):
@@ -296,108 +293,76 @@ def convert_cnf_xdata(cnf, no_vars):
         fanin_list.append([])
         fanout_list.append([])
     
-    while np.sum(clause_visited) < len(clause_visited):
-        coverage = np.sum(clause_visited) / len(clause_visited)
-        if coverage == last_coverage:
-            break
-        last_coverage = coverage
+    while len(lut_queue) > 0:
+        lut_idx = lut_queue.pop(0)
+        if has_lut[lut_idx]:
+            continue
+        has_lut[lut_idx] = 1
+        # Select clauses for LUT generation
+        var_comb, cover_clauses, tt = select_cnf(cnf, lut_idx, var_comb_map, var2varcomb_map)
+        if len(var_comb) == 0:
+            # print('[DEBUG] LUT %d has no clauses, consider as PI' % lut_idx)
+            continue
+        lut_fanin_list = []
+        # print('LUT %d: %s' % (lut_idx, var_comb))
         
-        # Assign the var with maximum occurrence as PO
-        var_cnts = var_count(cnf, no_vars, clause_visited)
-        var_arglist = np.argsort(var_cnts)[::-1]
-        for po_var in var_arglist:
-            if po_var == 0:
-                continue
-            if not has_lut[po_var-1]:
-                break
-        if po_var == 0:
-            break
+        for var in var_comb:
+            lut_fanin_list.append(var-1)
         
-        po_idx = po_var - 1
-        lut_queue = []
-        lut_queue.append(po_idx)
-        has_lut[po_idx] = 1
-        
-        # BFS to generate LUT    
-        while len(lut_queue) > 0:
-            lut_idx = lut_queue.pop(0)
-            # Select clauses for LUT generation
-            var_comb, cover_clauses, tt = select_cnf(cnf, clause_visited, lut_idx, var_comb_map, var2varcomb_map)
-            if len(var_comb) == 0:
-                # print('[DEBUG] LUT %d has no clauses, consider as PI' % lut_idx)
-                continue
-            if len(po_list) == 0 or po_list[-1] != po_idx:
-                po_list.append(po_idx)
-            lut_fanin_list = []
-            # print('LUT %d: %s' % (lut_idx, var_comb))
-            
-            for var in var_comb:
-                lut_fanin_list.append(var-1)
-            
-            for idx in lut_fanin_list:
-                if not has_lut[idx]:
-                    lut_queue.append(idx)
-                    has_lut[idx] = 1
-                    
-            # Parse 3-lut tt: 2 - Don't Care / -1 - Not Available State 
-            if 2 in tt:
-                new_fanin_idx = len(x_data)
-                extra_pi.append(len(x_data))
-                x_data.append([new_fanin_idx, gate_to_index['PI'], ''])
-                fanin_list.append([])
-                fanout_list.append([])
-                lut_fanin_list.append(new_fanin_idx)
-                new_tt = []
-                for k in range(len(tt)):
-                    if tt[k] == 2:
-                        new_tt.append(0)
-                        new_tt.append(1)
-                    else:
-                        new_tt.append(tt[k])
-                        new_tt.append(tt[k])
-                tt = new_tt
-            if -1 in tt:
-                add_fanout_tt = [1] * len(tt)
-                for k in range(len(tt)):
-                    if tt[k] == -1:
-                        add_fanout_tt[k] = 0
-                        tt[k] = 0       # 2 means don't care, if unsupport in LUT parser, use 0 
-                new_fanout_idx = len(x_data)
-                extra_po.append(new_fanout_idx)
-                tt_hex, ordered_lut_fanin_idx = create_lut(add_fanout_tt, lut_fanin_list)
-                x_data.append([new_fanout_idx, gate_to_index['LUT'], tt_hex])
-                fanout_list.append([])
-                fanin_list.append([])
-                fanin_list[new_fanout_idx] = ordered_lut_fanin_idx
-                for fanin_idx in ordered_lut_fanin_idx:
-                    fanout_list[fanin_idx].append(new_fanout_idx)
-            
-            if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
-                if lut_fanin_list[0] not in map_inv_idx:
-                    map_inv_idx[lut_fanin_list[0]] = lut_idx
-            tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanin_list)
-            x_data[lut_idx] = [lut_idx, gate_to_index['LUT'], tt_hex]
-
-            fanin_list[lut_idx] = ordered_lut_fanin_idx
+        for idx in lut_fanin_list:
+            if not has_lut[idx]:
+                lut_queue.append(idx)
+                
+        # Parse 3-lut tt: 2 - Don't Care / -1 - Not Available State 
+        if 2 in tt:
+            new_fanin_idx = len(x_data)
+            extra_pi.append(len(x_data))
+            x_data.append([new_fanin_idx, gate_to_index['PI'], ''])
+            fanin_list.append([])
+            fanout_list.append([])
+            lut_fanin_list.append(new_fanin_idx)
+            new_tt = []
+            for k in range(len(tt)):
+                if tt[k] == 2:
+                    new_tt.append(0)
+                    new_tt.append(1)
+                else:
+                    new_tt.append(tt[k])
+                    new_tt.append(tt[k])
+            tt = new_tt
+        if -1 in tt:
+            add_fanout_tt = [1] * len(tt)
+            for k in range(len(tt)):
+                if tt[k] == -1:
+                    add_fanout_tt[k] = 0
+                    tt[k] = 0       # 2 means don't care, if unsupport in LUT parser, use 0 
+            new_fanout_idx = len(x_data)
+            extra_po.append(new_fanout_idx)
+            tt_hex, ordered_lut_fanin_idx = create_lut(add_fanout_tt, lut_fanin_list)
+            x_data.append([new_fanout_idx, gate_to_index['LUT'], tt_hex])
+            fanout_list.append([])
+            fanin_list.append([])
+            fanin_list[new_fanout_idx] = ordered_lut_fanin_idx
             for fanin_idx in ordered_lut_fanin_idx:
-                fanout_list[fanin_idx].append(lut_idx)
-            
-            for clause_idx in cover_clauses:
-                clause_visited[clause_idx] = 1
+                fanout_list[fanin_idx].append(new_fanout_idx)
         
-    # [DEBUG] CNF2LUT Convert Ratio 
-    print('[DEBUG] CNF2LUT Convert Ratio: {:} / {:} = {:.2f}%, # Circuit: {:}'.format(
-        np.sum(clause_visited), len(clause_visited), np.sum(clause_visited) / len(clause_visited) * 100, 
-        len(po_list)
-    ))
+        if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
+            if lut_fanin_list[0] not in map_inv_idx:
+                map_inv_idx[lut_fanin_list[0]] = lut_idx
+        tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanin_list)
+        x_data[lut_idx] = [lut_idx, gate_to_index['LUT'], tt_hex]
+
+        fanin_list[lut_idx] = ordered_lut_fanin_idx
+        for fanin_idx in ordered_lut_fanin_idx:
+            fanout_list[fanin_idx].append(lut_idx)
+        
+        for clause_idx in cover_clauses:
+            clause_visited[clause_idx] = 1
     
-    # Check loop 
-    visited = []
-    for idx in range(no_vars):
-        visited.append([False] * len(fanin_list[idx]))
-            
-    traverse_graph(
-        no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_list) # last_node initialized as po_idx
+    # [DEBUG] CNF2LUT Convert Ratio 
+    print('[DEBUG] CNF2LUT Convert Ratio: {:} / {:} = {:.2f}%'.format(
+        np.sum(clause_visited), len(clause_visited), np.sum(clause_visited) / len(clause_visited) * 100
+    ))
     
     for clause_k in range(len(clause_visited)):
         if clause_visited[clause_k] == 0:
@@ -423,14 +388,27 @@ def convert_cnf_xdata(cnf, no_vars):
             x_data, fanin_list, fanout_list, or_idx = add_extra_or(x_data, fanin_list, fanout_list, extra_or_list)
             extra_po.append(or_idx)
     
+    # Check loop 
+    visited = []
+    for idx in range(no_vars):
+        visited.append([False] * len(fanin_list[idx]))
+            
+    traverse_graph(
+        no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_idx) # last_node initialized as po_idx
+    
     # Finish converting 
     # print('Finish converting')
-    return x_data, fanin_list, po_list, extra_pi, extra_po
+    return x_data, fanin_list, po_idx, extra_pi, extra_po
 
 def cnf2lut(cnf, no_vars):
     # Sort CNF
     no_clauses = len(cnf)
     # cnf = cnf_utils.sort_cnf(cnf)
+    
+    # Assign the var with maximum occurrence as PO
+    var_cnts = var_count(cnf, no_vars)
+    var_arglist = np.argsort(var_cnts)[::-1]
+    po_var = var_arglist[0]
 
     # Main
     # # Time analysis 
@@ -439,9 +417,9 @@ def cnf2lut(cnf, no_vars):
     # p_wrap(cnf, po_var, no_vars)
     # p.print_stats()
     # exit(0)
-    x_data, fanin_list, po_list, extra_pi, extra_po = convert_cnf_xdata(cnf, no_vars)
+    x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf, po_var, no_vars)
     
-    return x_data, fanin_list, po_list, extra_po
+    return x_data, fanin_list, [po_idx], extra_po
 
 def main(cnf_path, output_bench_path):
     # Read CNF 

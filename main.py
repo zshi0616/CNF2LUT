@@ -4,6 +4,7 @@ import os
 import itertools
 import copy
 import time
+from collections import Counter
 
 from utils.utils import run_command
 import utils.cnf_utils as cnf_utils
@@ -13,12 +14,18 @@ from utils.simulator import dec2list, list2hex
 from itertools import combinations
 from line_profiler import LineProfiler
 
+import sys
+sys.setrecursionlimit(100000)
+
 cnf_dir = './case/'
 NAME_LIST = [
-    # 'brent_15_0_25', 
-    # 'brent_13_0_1'
-    # 'h5'
-    'debug'
+    'mult_op_DEMO1_3_3_TOP6'
+    # 'c17_5_-1'
+    # 'a26', 'a28', 'b30',    # SAT
+    # 'brent_13_0_1', 'brent_15_0_25', 'h5'
+    # 'a28'
+    # 'tt_7'
+    # 'mchess16-mixed-45percent-blocked'
 ]
 
 LUT_MAX_FANIN = 5
@@ -31,19 +38,6 @@ def var_count(cnf, no_vars):
         for var in clause:
             var_cnts[abs(var)] += 1
     return var_cnts
-
-def check_loop(fanout_list, src, dst):
-    visited = [0] * len(fanout_list)
-    queue = [src]
-    while len(queue) > 0:
-        cur = queue.pop(0)
-        if cur == dst:
-            return True
-        visited[cur] = 1
-        for fanout in fanout_list[cur]:
-            if visited[fanout] == 0:
-                queue.append(fanout)
-    return False
 
 def divide_long_clauses(cnf, no_var, max_length=4):
     res_cnf = []
@@ -151,62 +145,131 @@ def subcnf_simulation(clauses, var_list, fanout_var):
     
     return truth_table
 
-def create_lut(lut_tt, lut_fanins):
-    no_fanin = len(lut_fanins)
+def create_lut(lut_tt, lut_fanin_list):
+    no_fanin = len(lut_fanin_list)
     lut_len = int(pow(2, no_fanin)) // 4
     # c = !a+b ==> c = 0xD (a, b)
-    ordered_lut_fanin = lut_fanins[::-1]
+    ordered_lut_fanin = lut_fanin_list[::-1]
     tt_hex = list2hex(lut_tt[::-1], lut_len)
     return tt_hex, ordered_lut_fanin
 
-def add_extra_and(x_data, fanin_list, and_list): 
+def add_extra_and(x_data, fanin_list, fanout_list, and_list): 
     k = 0
     while k < len(and_list): 
         extra_and_idx = len(x_data)
         if k + 3 < len(and_list):
             x_data.append([extra_and_idx, gate_to_index['LUT'], '8000'])
             fanin_list.append([and_list[k], and_list[k+1], and_list[k+2], and_list[k+3]])
+            fanout_list.append([])
             and_list.append(extra_and_idx)
             k += 4
         elif k + 2 < len(and_list):
             x_data.append([extra_and_idx, gate_to_index['LUT'], '80'])
             fanin_list.append([and_list[k], and_list[k+1], and_list[k+2]])
+            fanout_list.append([])
             and_list.append(extra_and_idx)
             k += 3
         elif k + 1 < len(and_list):
             x_data.append([extra_and_idx, gate_to_index['LUT'], '8'])
             fanin_list.append([and_list[k], and_list[k+1]])
+            fanout_list.append([])
             and_list.append(extra_and_idx)
             k += 2
         else:
             # print('[INFO] PO: %d' % and_list[k])
             break
-    return x_data, fanin_list, and_list[k]
+    return x_data, fanin_list, fanout_list, and_list[k]
 
-def add_extra_or(x_data, fanin_list, or_list):
+def add_extra_or(x_data, fanin_list, fanout_list, or_list):
     k = 0
     while k < len(or_list):
         extra_or_idx = len(x_data)
         if k + 3 < len(or_list):
             x_data.append([extra_or_idx, gate_to_index['LUT'], 'fffe'])
             fanin_list.append([or_list[k], or_list[k+1], or_list[k+2], or_list[k+3]])
+            fanout_list.append([])
             or_list.append(extra_or_idx)
             k += 4
         elif k + 2 < len(or_list):
             x_data.append([extra_or_idx, gate_to_index['LUT'], 'fe'])
             fanin_list.append([or_list[k], or_list[k+1], or_list[k+2]])
+            fanout_list.append([])
             or_list.append(extra_or_idx)
             k += 3
         elif k + 1 < len(or_list):
             x_data.append([extra_or_idx, gate_to_index['LUT'], 'e'])
             fanin_list.append([or_list[k], or_list[k+1]])
+            fanout_list.append([])
             or_list.append(extra_or_idx)
             k += 2
         else:
             # print('[INFO] PO: %d' % or_list[k])
             break
-    return x_data, fanin_list, or_list[k]
+    return x_data, fanin_list, fanout_list, or_list[k]
 
+def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, start_node):
+    # BFS 
+    q = []
+    q.append(start_node)
+    while len(q) > 0:
+        node = q.pop(0)
+        for k, fanin_node in enumerate(fanin_list[node]):
+            if 0 <= fanin_node < no_vars:
+                if not visited[node][k]:
+                    visited[node][k] = True
+                    q.append(fanin_node)
+                else:
+                    # Add PI 
+                    deloop_pi = len(x_data)
+                    x_data.append([deloop_pi, gate_to_index['PI'], ''])
+                    fanin_list.append([])
+                    fanout_list.append([])
+                    fanout_list[deloop_pi].append(node)
+                    for fanin_k in range(len(fanin_list[node])):
+                        if fanin_list[node][fanin_k] == fanin_node:
+                            fanin_list[node][fanin_k] = deloop_pi
+                    
+                    # Add XNOR LUT 
+                    deloop_xnor = len(x_data)
+                    x_data.append([deloop_xnor, gate_to_index['LUT'], '9'])
+                    fanin_list.append([fanin_node, deloop_pi])
+                    fanout_list.append([])
+                    for fanout_k in range(len(fanout_list[fanin_node])):
+                        if fanout_list[fanin_node][fanout_k] == node:
+                            fanout_list[fanin_node][fanout_k] = deloop_xnor
+                    fanout_list[deloop_pi].append(deloop_xnor)
+                    extra_po.append(deloop_xnor)
+    
+    '''
+    # DFS
+    for k, fanin_node in enumerate(fanin_list[node]):
+        if 0 <= fanin_node < no_vars:
+            if not visited[node][k]:
+                visited[node][k] = True
+                traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list,extra_pi, extra_po, fanin_node)
+            else:
+                # Add PI 
+                deloop_pi = len(x_data)
+                x_data.append([deloop_pi, gate_to_index['PI'], ''])
+                fanin_list.append([])
+                fanout_list.append([])
+                fanout_list[deloop_pi].append(node)
+                for fanin_k in range(len(fanin_list[node])):
+                    if fanin_list[node][fanin_k] == fanin_node:
+                        fanin_list[node][fanin_k] = deloop_pi
+                
+                # Add XNOR LUT 
+                deloop_xnor = len(x_data)
+                x_data.append([deloop_xnor, gate_to_index['LUT'], '9'])
+                fanin_list.append([fanin_node, deloop_pi])
+                fanout_list.append([])
+                for fanout_k in range(len(fanout_list[fanin_node])):
+                    if fanout_list[fanin_node][fanout_k] == node:
+                        fanout_list[fanin_node][fanout_k] = deloop_xnor
+                fanout_list[deloop_pi].append(deloop_xnor)
+                extra_po.append(deloop_xnor)
+    '''
+                        
 def convert_cnf_xdata(cnf, po_var, no_vars):
     x_data = []     # [name, is_lut, tt]
     fanin_list = []
@@ -217,9 +280,11 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
     extra_pi = []
     po_idx = po_var - 1
     map_inv_idx = {}
-    focone_list = []
+    # allfo_dict = {}
+    # for idx in range(no_vars):
+    #     allfo_dict[idx] = []
     
-    # Preprocess: record the var_comb
+    # Preprocess 
     var_comb_map, var2varcomb_map = get_var_comb_map(cnf)
     
     # Consider the unit clause as PO, generate LUT for po_var at first
@@ -232,7 +297,6 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         x_data.append([k-1, gate_to_index['PI'], ''])
         fanin_list.append([])
         fanout_list.append([])
-        focone_list.append([])
     
     while len(lut_queue) > 0:
         lut_idx = lut_queue.pop(0)
@@ -241,13 +305,13 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         if len(var_comb) == 0:
             # print('[DEBUG] LUT %d has no clauses, consider as PI' % lut_idx)
             continue
-        lut_fanins = []
+        lut_fanin_list = []
         # print('LUT %d: %s' % (lut_idx, var_comb))
         
         for var in var_comb:
-            lut_fanins.append(var-1)
+            lut_fanin_list.append(var-1)
         
-        for idx in lut_fanins:
+        for idx in lut_fanin_list:
             if not has_lut[idx]:
                 lut_queue.append(idx)
                 has_lut[idx] = 1
@@ -256,12 +320,10 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
         if 2 in tt:
             new_fanin_idx = len(x_data)
             extra_pi.append(len(x_data))
-            new_lut_idx = len(x_data)
             x_data.append([new_fanin_idx, gate_to_index['PI'], ''])
             fanin_list.append([])
             fanout_list.append([])
-            focone_list.append([])
-            lut_fanins.append(new_fanin_idx)
+            lut_fanin_list.append(new_fanin_idx)
             new_tt = []
             for k in range(len(tt)):
                 if tt[k] == 2:
@@ -279,61 +341,34 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
                     tt[k] = 0       # 2 means don't care, if unsupport in LUT parser, use 0 
             new_fanout_idx = len(x_data)
             extra_po.append(new_fanout_idx)
-            tt_hex, ordered_lut_fanin_idx = create_lut(add_fanout_tt, lut_fanins)
+            tt_hex, ordered_lut_fanin_idx = create_lut(add_fanout_tt, lut_fanin_list)
             x_data.append([new_fanout_idx, gate_to_index['LUT'], tt_hex])
             fanout_list.append([])
             fanin_list.append([])
-            focone_list.append([])
             fanin_list[new_fanout_idx] = ordered_lut_fanin_idx
             for fanin_idx in ordered_lut_fanin_idx:
                 fanout_list[fanin_idx].append(new_fanout_idx)
         
         if len(tt) == 2 and tt[0] == 0 and tt[1] == 1:
-            if lut_fanins[0] not in map_inv_idx:
-                map_inv_idx[lut_fanins[0]] = lut_idx
-        tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanins)
+            if lut_fanin_list[0] not in map_inv_idx:
+                map_inv_idx[lut_fanin_list[0]] = lut_idx
+        tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanin_list)
         x_data[lut_idx] = [lut_idx, gate_to_index['LUT'], tt_hex]
         
-        for k in ordered_lut_fanin_idx:
-            # loop detection
-            # if check_loop(fanout_list, lut_idx, k):
-            if k in focone_list[lut_idx]:
-                # print('{} -> {}'.format(k, lut_idx))
-                # Add PI
-                deloop_pi = len(x_data)
-                x_data.append([deloop_pi, gate_to_index['PI'], ''])
-                fanin_list.append([])
-                fanout_list.append([])
-                focone_list.append([])
-                fanout_list[deloop_pi].append(lut_idx)
-                for fanin_k in range(len(ordered_lut_fanin_idx)):
-                    if ordered_lut_fanin_idx[fanin_k] == k:
-                        ordered_lut_fanin_idx[fanin_k] = deloop_pi
-                
-                # Add XNOR LUT
-                deloop_xnor = len(x_data)
-                x_data.append([deloop_xnor, gate_to_index['LUT'], '9'])
-                fanin_list.append([k, deloop_pi])
-                fanout_list.append([])
-                focone_list.append([])
-                extra_po.append(deloop_xnor)
 
         fanin_list[lut_idx] = ordered_lut_fanin_idx
         for fanin_idx in ordered_lut_fanin_idx:
             fanout_list[fanin_idx].append(lut_idx)
-            
-        # Update focone_list 
-        foup_q = [lut_idx]
-        while len(foup_q) > 0:
-            foup_idx = foup_q.pop(0)
-            for fanin_idx in fanin_list[foup_idx]:
-                focone_list[fanin_idx] += focone_list[foup_idx] + [foup_idx]
-                focone_list[fanin_idx] = list(set(focone_list[fanin_idx]))
-                foup_q.append(fanin_idx)
         
         for clause_idx in cover_clauses:
             clause_visited[clause_idx] = 1
-            
+    
+    # [DEBUG] CNF2LUT Convert Ratio 
+    print('[DEBUG] CNF2LUT Convert Ratio: {:} / {:} = {:.2f}%'.format(
+        np.sum(clause_visited), len(clause_visited), np.sum(clause_visited) / len(clause_visited) * 100
+    ))
+    
+    
     for clause_k in range(len(clause_visited)):
         if clause_visited[clause_k] == 0:
             # print('[INFO] Find unassigned clauses, append to PO')
@@ -352,10 +387,20 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
                     extra_not = len(x_data)
                     x_data.append([extra_not, gate_to_index['LUT'], '1'])
                     fanin_list.append([node_idx])
+                    fanout_list.append([])
                     map_inv_idx[node_idx] = extra_not
                     extra_or_list.append(map_inv_idx[node_idx])
-            x_data, fanin_list, or_idx = add_extra_or(x_data, fanin_list, extra_or_list)
+            x_data, fanin_list, fanout_list, or_idx = add_extra_or(x_data, fanin_list, fanout_list, extra_or_list)
             extra_po.append(or_idx)
+    
+    
+    # Check loop 
+    visited = []
+    for idx in range(no_vars):
+        visited.append([False] * len(fanin_list[idx]))
+            
+    traverse_graph(
+        no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_idx) # last_node initialized as po_idx
     
     # Finish converting 
     # print('Finish converting')
@@ -364,7 +409,7 @@ def convert_cnf_xdata(cnf, po_var, no_vars):
 def cnf2lut(cnf, no_vars):
     # Sort CNF
     no_clauses = len(cnf)
-    cnf = cnf_utils.sort_cnf(cnf)
+    # cnf = cnf_utils.sort_cnf(cnf)
     
     # Assign the var with maximum occurrence as PO
     var_cnts = var_count(cnf, no_vars)
@@ -372,30 +417,44 @@ def cnf2lut(cnf, no_vars):
     po_var = var_arglist[0]
 
     # Main
-    
     # # Time analysis 
     # p = LineProfiler()
     # p_wrap = p(convert_cnf_xdata)
     # p_wrap(cnf, po_var, no_vars)
     # p.print_stats()
     # exit(0)
-    
     x_data, fanin_list, po_idx, extra_pi, extra_po = convert_cnf_xdata(cnf, po_var, no_vars)
     
-    return x_data, fanin_list, extra_po
+    return x_data, fanin_list, [po_idx], extra_po
 
 def main(cnf_path, output_bench_path):
     # Read CNF 
     cnf, no_vars = cnf_utils.read_cnf(cnf_path)
     
     # Main 
-    x_data, fanin_list, extra_po = cnf2lut(cnf, no_vars)
+    convert_starttime = time.time()
+    x_data, fanin_list, po_list, extra_po = cnf2lut(cnf, no_vars)
+    print('convert time: {:.4f} s'.format(time.time() - convert_starttime))
     
     # Save 
     fanout_list = clut_utils.get_fanout_list(x_data, fanin_list)
+    saveclut_starttime = time.time()
     clut_utils.save_clut(output_bench_path, x_data, fanin_list, fanout_list, const_1_list=extra_po)
+    print('saveclut time: {:.4f} s'.format(time.time() - saveclut_starttime))
 
 if __name__ == '__main__':
+    # x_data = [[0, gate_to_index['PI'], 0], [0, gate_to_index['LUT'], '1'], [0, gate_to_index['LUT'], '1'], 
+    #           [0, gate_to_index['LUT'], '1'], [0, gate_to_index['LUT'], '1']]
+    # no_vars = len(x_data)
+    # fanin_list = [[], [0, 3], [1], [2], [2]]
+    # fanout_list = [[1], [2], [3, 4], [1], []]
+    # visited = [[False] * no_vars for _ in range(no_vars)]
+    # extra_pi = []
+    # extra_po = []
+    
+    # traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, 4)
+    # print()
+    
     for cnf_path in glob.glob(os.path.join(cnf_dir, '*.cnf')):
         cnf_name = cnf_path.split('/')[-1].split('.')[0]
         if cnf_name not in NAME_LIST:
@@ -404,5 +463,5 @@ if __name__ == '__main__':
         output_path = os.path.join(output_dir, cnf_name + '.bench')
         
         main(cnf_path, output_path)    
-        
-    
+        print(output_path)
+        print()
