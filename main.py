@@ -17,15 +17,18 @@ from line_profiler import LineProfiler
 import sys
 sys.setrecursionlimit(100000)
 
-cnf_dir = './case/'
+cnf_dir = './testcase/'
 NAME_LIST = [
-    'mult_op_DEMO1_3_3_TOP6'
+    # 'mult_op_DEMO1_3_3_TOP6'
+    # 'test'
     # 'c17_5_-1'
     # 'a26', 'a28', 'b30',    # SAT
-    # 'brent_13_0_1', 'brent_15_0_25', 'h5'
+    # 'brent_13_0_1', 'brent_15_0_25', 
     # 'a28'
     # 'tt_7'
     # 'mchess16-mixed-45percent-blocked'
+    # 'rand_01'
+    'h5'
 ]
 
 LUT_MAX_FANIN = 5
@@ -92,6 +95,9 @@ def get_var_comb_map(cnf):
     return var_comb_map, var2varcomb_map
 
 def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
+    if fanout_idx == 14:
+        print()
+    
     fanout_var = fanout_idx + 1
     assert fanout_var > 0, 'fanout_idx must be positive'
     if fanout_var not in var2varcomb_map:

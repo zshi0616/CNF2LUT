@@ -17,7 +17,7 @@ from line_profiler import LineProfiler
 import sys
 sys.setrecursionlimit(100000)
 
-cnf_dir = './case/'
+cnf_dir = './testcase/'
 NAME_LIST = [
     # 'mult_op_DEMO1_3_3_TOP6'
     # 'test'
@@ -27,7 +27,8 @@ NAME_LIST = [
     # 'a28'
     # 'tt_7'
     # 'mchess16-mixed-45percent-blocked'
-    'rand_01'
+    # 'rand_01'
+    'h5'
 ]
 
 LUT_MAX_FANIN = 5
@@ -101,6 +102,81 @@ def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
     if fanout_var not in var2varcomb_map:
         return [], [], []
     var_comb_list = var2varcomb_map[fanout_var]
+    
+    # Find joint var_comb (1, 4, 7) (1, 5) ==> (1, 4, 5, 7)
+    res_clauses_list = []
+    res_clauses_index_list = []
+    res_var_comb_list = []
+    res_tt_list = []
+    res_clauses = []
+    res_clauses_index = []
+    res_var_comb = []
+    res_tt = []
+    is_covered = [0] * len(var_comb_list)
+    while np.sum(is_covered) != len(var_comb_list):
+        for var_comb_idx, var_comb in enumerate(var_comb_list):
+            if is_covered[var_comb_idx] == 1:
+                continue
+            var_comb_wo_fanout = list(var_comb)
+            var_comb_wo_fanout.remove(fanout_var)
+            tmp_var_comb = list(set(res_var_comb + var_comb_wo_fanout))
+            if len(tmp_var_comb) <= LUT_MAX_FANIN+1:
+                is_covered[var_comb_idx] = 1
+                for clause_idx in var_comb_map[var_comb]:
+                    if clause_visited[clause_idx] == 1:
+                        continue
+                    res_var_comb = tmp_var_comb
+                    res_clauses_index.append(clause_idx)
+                    res_clauses.append(cnf[clause_idx])
+        if len(res_var_comb) == 0:
+            continue
+        else:
+            res_var_comb_list.append(sorted(copy.deepcopy(res_var_comb)))
+            res_clauses_list.append(copy.deepcopy(res_clauses))
+            res_clauses_index_list.append(copy.deepcopy(res_clauses_index))
+            res_clauses = []
+            res_var_comb = []
+            res_clauses_index = []
+    
+    # k = 0
+    # while k < len(var_comb_list):
+    #     var_comb = var_comb_list[k]
+    #     var_comb_wo_fanout = list(var_comb)
+    #     var_comb_wo_fanout.remove(fanout_var)
+    #     tmp_var_comb = list(set(res_var_comb + var_comb_wo_fanout))
+    #     if len(tmp_var_comb) <= LUT_MAX_FANIN+1:
+    #         for clause_idx in var_comb_map[var_comb]:
+    #             if clause_visited[clause_idx] == 1:
+    #                 continue
+    #             res_var_comb = tmp_var_comb
+    #             res_clauses_index.append(clause_idx)
+    #             res_clauses.append(cnf[clause_idx])
+    #         k += 1
+    #     else:
+    #         if len(res_var_comb) > 0:
+    #             res_var_comb_list.append(sorted(copy.deepcopy(res_var_comb)))
+    #             res_clauses_list.append(copy.deepcopy(res_clauses))
+    #             res_clauses_index_list.append(copy.deepcopy(res_clauses_index))
+    #             res_clauses = []
+    #             res_var_comb = []
+    #             res_clauses_index = []
+    # if len(res_var_comb) > 0:
+    #     res_var_comb_list.append(sorted(copy.deepcopy(res_var_comb)))
+    #     res_clauses_list.append(copy.deepcopy(res_clauses))
+    #     res_clauses_index_list.append(copy.deepcopy(res_clauses_index))
+
+    for k, res_var_comb in enumerate(res_var_comb_list):
+        res_tt = subcnf_simulation(res_clauses_list[k], res_var_comb, fanout_var)
+        res_tt_list.append(res_tt)
+    
+    return res_var_comb_list, res_clauses_index_list, res_tt_list
+
+def select_cnf_old(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
+    fanout_var = fanout_idx + 1
+    assert fanout_var > 0, 'fanout_idx must be positive'
+    if fanout_var not in var2varcomb_map:
+        return [], [], []
+    var_comb_list = var2varcomb_map[fanout_var]
 
     # Find joint var_comb (1, 4, 7) (1, 5) ==> (1, 4, 5, 7)
     res_clauses = []
@@ -123,8 +199,9 @@ def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
     else:
         res_var_comb = sorted(res_var_comb)
         res_tt = subcnf_simulation(res_clauses, res_var_comb, fanout_var)
-        return res_var_comb, res_clauses_index, res_tt
+        return [res_var_comb], [res_clauses_index], [res_tt]
         
+
 def subcnf_simulation(clauses, var_list, fanout_var):
     truth_table = []
     no_vars = len(var_list)
@@ -211,6 +288,31 @@ def add_extra_or(x_data, fanin_list, fanout_list, or_list):
             break
     return x_data, fanin_list, fanout_list, or_list[k]
 
+def add_extra_xnor(x_data, fanin_list, fanout_list, xnor_list, map_inv_idx):
+    # pos and 
+    extra_and_list = []
+    for fo_idx in xnor_list:
+        extra_and_list.append(fo_idx)
+    x_data, fanin_list, fanout_list, pos_and_idx = add_extra_and(x_data, fanin_list, fanout_list, extra_and_list)
+    # neg and 
+    extra_and_list = []
+    for fo_idx in xnor_list:
+        if fo_idx in map_inv_idx:
+            extra_and_list.append(map_inv_idx[fo_idx])
+        else:
+            extra_not = len(x_data)
+            x_data.append([extra_not, gate_to_index['LUT'], '1'])
+            fanin_list.append([fo_idx])
+            fanout_list.append([])
+            map_inv_idx[fo_idx] = extra_not
+            extra_and_list.append(extra_not)
+    x_data, fanin_list, fanout_list, neg_and_idx = add_extra_and(x_data, fanin_list, fanout_list, extra_and_list)
+    # OR 
+    extra_or_list = [pos_and_idx, neg_and_idx]
+    x_data, fanin_list, fanout_list, xnor_idx = add_extra_or(x_data, fanin_list, fanout_list, extra_or_list)
+    
+    return x_data, fanin_list, fanout_list, xnor_idx
+
 def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_list):
     # BFS 
     q = []
@@ -296,41 +398,35 @@ def convert_cnf_xdata(cnf, no_vars):
         fanin_list.append([])
         fanout_list.append([])
     
-    while np.sum(clause_visited) < len(clause_visited):
-        coverage = np.sum(clause_visited) / len(clause_visited)
-        if coverage == last_coverage:
-            break
-        last_coverage = coverage
+    # Assign the var with maximum occurrence as PO
+    var_cnts = var_count(cnf, no_vars, clause_visited)
+    var_arglist = np.argsort(var_cnts)[::-1]
+    po_var = var_arglist[0]
+    # # Assign the var with unit clauses 
+    # cnf = cnf_utils.sort_cnf(cnf)
+    # po_var = cnf[0][0]
+    
+    po_idx = po_var - 1
+    lut_queue = []
+    lut_queue.append(po_idx)
+    has_lut[po_idx] = 1
+    po_list.append(po_idx)
+    
+    # BFS to generate LUT    
+    while len(lut_queue) > 0:
+        lut_idx = lut_queue.pop(0)
+        lut_idx_list = []
+        # Select clauses for LUT generation
+        # var_comb, cover_clauses, tt = select_cnf(cnf, clause_visited, lut_idx, var_comb_map, var2varcomb_map)
+        var_comb_list, cover_clauses_list, tt_list = select_cnf(cnf, clause_visited, lut_idx, var_comb_map, var2varcomb_map)
         
-        # Assign the var with maximum occurrence as PO
-        var_cnts = var_count(cnf, no_vars, clause_visited)
-        var_arglist = np.argsort(var_cnts)[::-1]
-        for po_var in var_arglist:
-            if po_var == 0:
-                continue
-            if not has_lut[po_var-1]:
-                break
-        if po_var == 0:
-            break
-        
-        po_idx = po_var - 1
-        lut_queue = []
-        lut_queue.append(po_idx)
-        has_lut[po_idx] = 1
-        
-        # BFS to generate LUT    
-        while len(lut_queue) > 0:
-            lut_idx = lut_queue.pop(0)
-            # Select clauses for LUT generation
-            var_comb, cover_clauses, tt = select_cnf(cnf, clause_visited, lut_idx, var_comb_map, var2varcomb_map)
+        for var_comb_idx, var_comb in enumerate(var_comb_list):
+            cover_clauses = cover_clauses_list[var_comb_idx]
+            tt = tt_list[var_comb_idx]
             if len(var_comb) == 0:
-                # print('[DEBUG] LUT %d has no clauses, consider as PI' % lut_idx)
                 continue
-            if len(po_list) == 0 or po_list[-1] != po_idx:
-                po_list.append(po_idx)
-            lut_fanin_list = []
-            # print('LUT %d: %s' % (lut_idx, var_comb))
             
+            lut_fanin_list = []
             for var in var_comb:
                 lut_fanin_list.append(var-1)
             
@@ -376,28 +472,34 @@ def convert_cnf_xdata(cnf, no_vars):
                 if lut_fanin_list[0] not in map_inv_idx:
                     map_inv_idx[lut_fanin_list[0]] = lut_idx
             tt_hex, ordered_lut_fanin_idx = create_lut(tt, lut_fanin_list)
-            x_data[lut_idx] = [lut_idx, gate_to_index['LUT'], tt_hex]
+            if var_comb_idx == 0:
+                x_data[lut_idx] = [lut_idx, gate_to_index['LUT'], tt_hex]
 
-            fanin_list[lut_idx] = ordered_lut_fanin_idx
-            for fanin_idx in ordered_lut_fanin_idx:
-                fanout_list[fanin_idx].append(lut_idx)
-            
+                fanin_list[lut_idx] = ordered_lut_fanin_idx
+                for fanin_idx in ordered_lut_fanin_idx:
+                    fanout_list[fanin_idx].append(lut_idx)
+                lut_idx_list.append(lut_idx)
+            else:
+                new_lut_idx = len(x_data)
+                x_data.append([new_lut_idx, gate_to_index['LUT'], tt_hex])
+                fanin_list.append(ordered_lut_fanin_idx)
+                fanout_list.append([])
+                for fanin_idx in ordered_lut_fanin_idx:
+                    fanout_list[fanin_idx].append(new_lut_idx)
+                lut_idx_list.append(new_lut_idx)
+                
             for clause_idx in cover_clauses:
                 clause_visited[clause_idx] = 1
+        
+        if len(lut_idx_list) > 1:
+            x_data, fanin_list, fanout_list, xnor_idx = add_extra_xnor(x_data, fanin_list, fanout_list, lut_idx_list, map_inv_idx)
+            extra_po.append(xnor_idx)
         
     # [DEBUG] CNF2LUT Convert Ratio 
     print('[DEBUG] CNF2LUT Convert Ratio: {:} / {:} = {:.2f}%, # Circuit: {:}'.format(
         np.sum(clause_visited), len(clause_visited), np.sum(clause_visited) / len(clause_visited) * 100, 
         len(po_list)
     ))
-    
-    # Check loop 
-    visited = []
-    for idx in range(no_vars):
-        visited.append([False] * len(fanin_list[idx]))
-            
-    traverse_graph(
-        no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_list) # last_node initialized as po_idx
     
     for clause_k in range(len(clause_visited)):
         if clause_visited[clause_k] == 0:
@@ -422,6 +524,14 @@ def convert_cnf_xdata(cnf, no_vars):
                     extra_or_list.append(map_inv_idx[node_idx])
             x_data, fanin_list, fanout_list, or_idx = add_extra_or(x_data, fanin_list, fanout_list, extra_or_list)
             extra_po.append(or_idx)
+    
+    # Check loop 
+    visited = []
+    for idx in range(no_vars):
+        visited.append([False] * len(fanin_list[idx]))
+            
+    traverse_graph(
+        no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, extra_po, po_list) # last_node initialized as po_idx
     
     # Finish converting 
     # print('Finish converting')
@@ -449,7 +559,7 @@ def main(cnf_path, output_bench_path):
     
     # Main 
     convert_starttime = time.time()
-    x_data, fanin_list, po_list, extra_po = cnf2lut(cnf, no_vars)
+    x_data, fanin_list, po_list, extra_po, uncovered = cnf2lut(cnf, no_vars)
     print('convert time: {:.4f} s'.format(time.time() - convert_starttime))
     
     # Save 

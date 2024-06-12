@@ -8,9 +8,10 @@ from wrapper import *
 
 CASE_DIR = './case'
 CASE_LIST = [
-    # 'a26', 'a28', 'b30'
-    # 'c17_5_-1'
-    'brent_9_0', 'brent_13_0_1', 'brent_15_0_25'
+    # 'a26', 'a28', 'b30', 
+    # 'c17_5_-1', 
+    # 'brent_9_0', 'brent_13_0_1', 
+    'brent_15_0_25', 
     # 'mult_op_DEMO1_3_3_TOP6'
 ]
 
@@ -25,15 +26,13 @@ if __name__ == '__main__':
         ####################################################################
         # Baseline: CNF -> SAT
         ####################################################################
-        # bl_res, _, bl_timelist = baseline_solve(cnf_path)
-        # bl_time = bl_timelist[1]
-        # if bl_res == -1:
-        #     print('[WARNING] Baseline Timeout')
-        # print('[INFO] Result: {:}'.format(bl_res))
-        # print('Baseline Time: {:.2f}s'.format(bl_timelist[1]))
-        # tot_bl_time += bl_time
-        bl_time = 1
-        bl_res = 0
+        bl_res, _, bl_timelist = baseline_solve(cnf_path)
+        bl_time = bl_timelist[1]
+        if bl_res == -1:
+            print('[WARNING] Baseline Timeout')
+        print('[INFO] Result: {:}'.format(bl_res))
+        print('Baseline Time: {:.2f}s'.format(bl_timelist[1]))
+        tot_bl_time += bl_time
         
         ####################################################################
         # C2L: CNF -> LUT -> CNF -> SAT
