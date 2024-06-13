@@ -104,6 +104,7 @@ def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
     var_comb_list = var2varcomb_map[fanout_var]
     
     # Find joint var_comb (1, 4, 7) (1, 5) ==> (1, 4, 5, 7)
+    # Find all var combs that cover all clauses
     res_clauses_list = []
     res_clauses_index_list = []
     res_var_comb_list = []
@@ -137,33 +138,6 @@ def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
             res_clauses = []
             res_var_comb = []
             res_clauses_index = []
-    
-    # k = 0
-    # while k < len(var_comb_list):
-    #     var_comb = var_comb_list[k]
-    #     var_comb_wo_fanout = list(var_comb)
-    #     var_comb_wo_fanout.remove(fanout_var)
-    #     tmp_var_comb = list(set(res_var_comb + var_comb_wo_fanout))
-    #     if len(tmp_var_comb) <= LUT_MAX_FANIN+1:
-    #         for clause_idx in var_comb_map[var_comb]:
-    #             if clause_visited[clause_idx] == 1:
-    #                 continue
-    #             res_var_comb = tmp_var_comb
-    #             res_clauses_index.append(clause_idx)
-    #             res_clauses.append(cnf[clause_idx])
-    #         k += 1
-    #     else:
-    #         if len(res_var_comb) > 0:
-    #             res_var_comb_list.append(sorted(copy.deepcopy(res_var_comb)))
-    #             res_clauses_list.append(copy.deepcopy(res_clauses))
-    #             res_clauses_index_list.append(copy.deepcopy(res_clauses_index))
-    #             res_clauses = []
-    #             res_var_comb = []
-    #             res_clauses_index = []
-    # if len(res_var_comb) > 0:
-    #     res_var_comb_list.append(sorted(copy.deepcopy(res_var_comb)))
-    #     res_clauses_list.append(copy.deepcopy(res_clauses))
-    #     res_clauses_index_list.append(copy.deepcopy(res_clauses_index))
 
     for k, res_var_comb in enumerate(res_var_comb_list):
         res_tt = subcnf_simulation(res_clauses_list[k], res_var_comb, fanout_var)
@@ -506,7 +480,6 @@ def convert_cnf_xdata(cnf, no_vars):
             # print('[INFO] Find unassigned clauses, append to PO')
             unassigned_clause = cnf[clause_k]
             
-            # TODO: Consider as another circuit AND with this circuit 
             # Now just append unconnected clauses to PO 
             extra_or_list = []
             for var in unassigned_clause:
