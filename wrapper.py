@@ -10,8 +10,8 @@ import utils.simulator as simulator
 from utils.utils import run_command
 
 # Change here !!! (default: main_deloop.py)
-from main_deloop import cnf2lut
-from main_deloop import main as cnf2lut_bench
+from main import cnf2lut
+from main import main as cnf2lut_bench
 
 import time 
 

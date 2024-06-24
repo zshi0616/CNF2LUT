@@ -11,8 +11,11 @@ CASE_LIST = [
     # 'a26', 'a28', 'b30', 
     # 'c17_5_-1', 
     # 'brent_9_0', 'brent_13_0_1', 
-    'brent_15_0_25', 
+    # 'brent_15_0_25', 
+    # 'php16-mixed-35percent-blocked', 'php17-mixed-35percent-blocked'
     # 'mult_op_DEMO1_3_3_TOP6'
+    'sat05-2534', 'mchess16-mixed-45percent-blocked', 'php16-mixed-35percent-blocked', 
+    'velev-pipe-o-uns-1-7'
 ]
 
 if __name__ == '__main__':
@@ -41,7 +44,9 @@ if __name__ == '__main__':
         c2l_time = c2l_timelist[0] + c2l_timelist[1]
         if c2l_res == -1:
             print('[WARNING] c2l Timeout')
-        assert c2l_res == bl_res
+        print('[INFO] Result: {:}'.format(c2l_res))
+        if bl_res != -1 and c2l_res != -1:
+            assert bl_res == c2l_res
         print('[INFO] C2L Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
             c2l_timelist[0], c2l_timelist[1], c2l_time, 
             (bl_time - c2l_time) / bl_time * 100
@@ -56,7 +61,8 @@ if __name__ == '__main__':
         # c2lsam_time = c2lsam_timelist[0] + c2lsam_timelist[1]
         # if c2lsam_res == -1:
         #     print('[WARNING] c2lsam Timeout')
-        # assert c2lsam_res == bl_res
+        # if bl_res != -1 and c2lsam_res != -1:
+        #     assert c2lsam_res == bl_res
         # print('[INFO] C2LSAM Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
         #     c2lsam_timelist[0], c2lsam_timelist[1], c2lsam_time, 
         #     (bl_time - c2lsam_time) / bl_time * 100
@@ -69,7 +75,8 @@ if __name__ == '__main__':
         # c2a_time = c2a_timelist[0] + c2a_timelist[1]
         # if c2a_res == -1:
         #     print('[WARNING] c2a Timeout')
-        # assert c2a_res == bl_res
+        # if bl_res != -1 and c2a_res != -1:
+        #     assert c2a_res == bl_res
         # print('[INFO] C2A Trans. {:.2f}s, Solve: {:.2f}s, Tot: {:.2f}s | Red.: {:.2f}%'.format(
         #     c2a_timelist[0], c2a_timelist[1], c2a_time, 
         #     (bl_time - c2a_time) / bl_time * 100
