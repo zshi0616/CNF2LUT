@@ -10,20 +10,17 @@ Authors: Anonymous Author
 TODO
 
 ## Run
-Firstly, you need to create two directories within your project directory:
 
-    case/ - Put all the CNF files that need to be converted into this directory.
-
-    output/ - The converted files will be saved in this directory.
-
-Run the following command:
 ```sh 
+mkdir case  # Put all the CNF files that need to be converted into this directory
+mkdir output
 python main.py
 ```
 
 ## Create Cases
 We can use [abc](https://github.com/berkeley-abc/abc) and tool to create original circuit
 ```sh 
+mkdir tmp
 abc -c "read_truth 12; strash; write_bench tmp/old.bench; write_aiger tmp/old.aig"
 ```
 
