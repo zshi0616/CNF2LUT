@@ -581,8 +581,8 @@ if __name__ == '__main__':
     
     for cnf_path in glob.glob(os.path.join(cnf_dir, '*.cnf')):
         cnf_name = cnf_path.split('/')[-1].split('.')[0]
-        if cnf_name not in NAME_LIST:
-            continue
+        # if cnf_name not in NAME_LIST:
+        #     continue
         print('Processing %s' % cnf_path)
         output_path = os.path.join(output_dir, cnf_name + '.bench')
         
