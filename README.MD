@@ -10,6 +10,13 @@ Authors: Anonymous Author
 TODO
 
 ## Run
+Firstly, you need to create two directories within your project directory:
+
+    case/ - Put all the CNF files that need to be converted into this directory.
+
+    output/ - The converted files will be saved in this directory.
+
+Run the following command:
 ```sh 
 python main.py
 ```
