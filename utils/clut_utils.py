@@ -115,7 +115,7 @@ def save_clut_onepo(filepath, x_data, fanin_list, fanout_list, const_1_list=[]):
                 fanin.append(input_idx[idx])
             fanin_list.append(fanin)
             fanout_list.append([])
-        # 不够32的部分
+        # 剩余的部分
         fanin =[]
         for idx in range( int(input_num/And_max_fanin)*And_max_fanin, input_num ):
             fanin.append(input_idx[idx])
