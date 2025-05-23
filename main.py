@@ -17,7 +17,7 @@ from line_profiler import LineProfiler
 import sys
 sys.setrecursionlimit(100000)
 
-cnf_dir = './case/'
+cnf_dir = './testcase/'
 NAME_LIST = [
     # 'mult_op_DEMO1_3_3_TOP6'
     # 'test'
@@ -37,6 +37,12 @@ LUT_MAX_FANIN = 6
 gate_to_index={'PI': 0, 'LUT': 1}
 output_dir = './output/'
 
+REDUND_CLAUSE = False
+CLAUSE_MAX_LENGTH = 4
+REDUND_CLAUSE_MIN_LENGTH = 8
+
+USE_SIMILARITY_PACKING = False 
+
 def var_count(cnf, no_vars, clause_visited=[]):
     var_cnts = [0] * (no_vars + 1)
     for clause_k, clause in enumerate(cnf):
@@ -46,12 +52,16 @@ def var_count(cnf, no_vars, clause_visited=[]):
             var_cnts[abs(var)] += 1
     return var_cnts
 
-def divide_long_clauses(cnf, no_var, max_length=4):
+def divide_long_clauses(cnf, no_var, max_length=CLAUSE_MAX_LENGTH):
     res_cnf = []
     res_no_var = no_var
+    long_clauses = []  
+    
     for clause in cnf:
-        if len(clause) < max_length:
+        if len(clause) <= max_length:
             res_cnf.append(clause)
+        elif REDUND_CLAUSE and len(clause) > REDUND_CLAUSE_MIN_LENGTH:
+            long_clauses.append(clause)  
         else:
             # divide clause based on resolution rules 
             while len(clause) > max_length:
@@ -60,7 +70,8 @@ def divide_long_clauses(cnf, no_var, max_length=4):
                 res_no_var += 1
                 clause = [-new_var] + clause[max_length-1:]
             res_cnf.append(clause)
-    return res_cnf, res_no_var
+            
+    return res_cnf, res_no_var, long_clauses
 
 def get_var_comb_map(cnf):
     var_comb_map = {}
@@ -98,6 +109,13 @@ def get_var_comb_map(cnf):
                 
     return var_comb_map, var2varcomb_map
 
+def calc_similarity(comb1, comb2):
+    set1 = set(comb1)
+    set2 = set(comb2)
+    intersection = len(set1.intersection(set2))
+    union = len(set1.union(set2))
+    return intersection / union if union > 0 else 0
+
 def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
     fanout_var = fanout_idx + 1
     assert fanout_var > 0, 'fanout_idx must be positive'
@@ -116,17 +134,40 @@ def select_cnf(cnf, clause_visited, fanout_idx, var_comb_map, var2varcomb_map):
         placed = False
         var_comb_wo_fanout = list(var_comb)
         var_comb_wo_fanout.remove(fanout_var)
-        for k in range(len(res_var_comb_list)):
-            tmp_var_comb = list(set(res_var_comb_list[k] + var_comb_wo_fanout))
-            if len(tmp_var_comb) < LUT_MAX_FANIN:
+        
+        if USE_SIMILARITY_PACKING:
+            best_similarity = -1
+            best_k = -1
+            for k in range(len(res_var_comb_list)):
+                tmp_var_comb = list(set(res_var_comb_list[k] + var_comb_wo_fanout))
+                if len(tmp_var_comb) <= LUT_MAX_FANIN:
+                    similarity = calc_similarity(res_var_comb_list[k], var_comb_wo_fanout)
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                        best_k = k
+            
+            if best_k >= 0:
+                tmp_var_comb = list(set(res_var_comb_list[best_k] + var_comb_wo_fanout))
                 for clause_idx in var_comb_map[var_comb]:
                     if clause_visited[clause_idx] == 1:
                         continue
-                    res_var_comb_list[k] = tmp_var_comb
-                    res_clauses_list[k].append(cnf[clause_idx])
-                    res_clauses_index_list[k].append(clause_idx)
+                    res_var_comb_list[best_k] = tmp_var_comb
+                    res_clauses_list[best_k].append(cnf[clause_idx])
+                    res_clauses_index_list[best_k].append(clause_idx)
                 placed = True
-                break
+        else:
+            for k in range(len(res_var_comb_list)):
+                tmp_var_comb = list(set(res_var_comb_list[k] + var_comb_wo_fanout))
+                if len(tmp_var_comb) <= LUT_MAX_FANIN:
+                    for clause_idx in var_comb_map[var_comb]:
+                        if clause_visited[clause_idx] == 1:
+                            continue
+                        res_var_comb_list[k] = tmp_var_comb
+                        res_clauses_list[k].append(cnf[clause_idx])
+                        res_clauses_index_list[k].append(clause_idx)
+                    placed = True
+                    break
+            
         if not placed:
             has_uncovered = False
             for clause_idx in var_comb_map[var_comb]:
@@ -262,19 +303,19 @@ def add_extra_or(x_data, fanin_list, fanout_list, or_list):
     k = 0
     while k < len(or_list):
         extra_or_idx = len(x_data)
-        if k + 3 < len(or_list):
+        if k + 3 < len(or_list): # 4-input LUT
             x_data.append([extra_or_idx, gate_to_index['LUT'], 'fffe'])
             fanin_list.append([or_list[k], or_list[k+1], or_list[k+2], or_list[k+3]])
             fanout_list.append([])
             or_list.append(extra_or_idx)
             k += 4
-        elif k + 2 < len(or_list):
+        elif k + 2 < len(or_list): # 3-input LUT
             x_data.append([extra_or_idx, gate_to_index['LUT'], 'fe'])
             fanin_list.append([or_list[k], or_list[k+1], or_list[k+2]])
             fanout_list.append([])
             or_list.append(extra_or_idx)
             k += 3
-        elif k + 1 < len(or_list):
+        elif k + 1 < len(or_list): # 2-input LUT
             x_data.append([extra_or_idx, gate_to_index['LUT'], 'e'])
             fanin_list.append([or_list[k], or_list[k+1]])
             fanout_list.append([])
@@ -282,6 +323,46 @@ def add_extra_or(x_data, fanin_list, fanout_list, or_list):
             k += 2
         else:
             # print('[INFO] PO: %d' % or_list[k])
+            break
+    return x_data, fanin_list, fanout_list, or_list[k]
+
+def add_extra_or_long_clause(x_data, fanin_list, fanout_list, or_list):
+    k = 0
+    while k < len(or_list):
+        extra_or_idx = len(x_data)
+        if k + 5 < len(or_list): # 6-input LUT
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'FFFFFFFFFFFFFFFE'])
+            fanin_list.append([or_list[k], or_list[k+1], or_list[k+2], or_list[k+3],
+                             or_list[k+4], or_list[k+5]])
+            fanout_list.append([])
+            or_list.append(extra_or_idx)
+            k += 6
+        elif k + 4 < len(or_list): # 5-input LUT
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'FFFFFFFE'])
+            fanin_list.append([or_list[k], or_list[k+1], or_list[k+2], or_list[k+3],
+                             or_list[k+4]])
+            fanout_list.append([])
+            or_list.append(extra_or_idx)
+            k += 5
+        elif k + 3 < len(or_list): # 4-input LUT
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'FFFE'])
+            fanin_list.append([or_list[k], or_list[k+1], or_list[k+2], or_list[k+3]])
+            fanout_list.append([])
+            or_list.append(extra_or_idx)
+            k += 4
+        elif k + 2 < len(or_list): # 3-input LUT
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'FE'])
+            fanin_list.append([or_list[k], or_list[k+1], or_list[k+2]])
+            fanout_list.append([])
+            or_list.append(extra_or_idx)
+            k += 3
+        elif k + 1 < len(or_list): # 2-input LUT
+            x_data.append([extra_or_idx, gate_to_index['LUT'], 'E'])
+            fanin_list.append([or_list[k], or_list[k+1]])
+            fanout_list.append([])
+            or_list.append(extra_or_idx)
+            k += 2
+        else:
             break
     return x_data, fanin_list, fanout_list, or_list[k]
 
@@ -376,7 +457,8 @@ def traverse_graph(no_vars, x_data, visited, fanin_list, fanout_list, extra_pi, 
                         
 def convert_cnf_xdata(cnf, no_vars):
     # divide long clauses
-    cnf, no_vars = divide_long_clauses(cnf, no_vars, max_length=LUT_MAX_FANIN-1)
+    # cnf, no_vars, long_clauses = divide_long_clauses(cnf, no_vars, max_length=LUT_MAX_FANIN-1)
+    cnf, no_vars, long_clauses = divide_long_clauses(cnf, no_vars)
     
     x_data = []     # [name, is_lut, tt]
     fanin_list = []
@@ -522,6 +604,26 @@ def convert_cnf_xdata(cnf, no_vars):
                     extra_or_list.append(map_inv_idx[node_idx])
             x_data, fanin_list, fanout_list, or_idx = add_extra_or(x_data, fanin_list, fanout_list, extra_or_list)
             extra_po.append(or_idx)
+        
+    for clause in long_clauses:
+        unassigned_clause = clause
+        # Now just append unconnected clauses to PO 
+        extra_or_list = []
+        for var in unassigned_clause:
+            node_idx = abs(var) - 1
+            if var > 0:
+                extra_or_list.append(node_idx)
+            elif node_idx in map_inv_idx:
+                extra_or_list.append(map_inv_idx[node_idx])
+            else:
+                extra_not = len(x_data)
+                x_data.append([extra_not, gate_to_index['LUT'], '1'])
+                fanin_list.append([node_idx])
+                fanout_list.append([])
+                map_inv_idx[node_idx] = extra_not
+                extra_or_list.append(map_inv_idx[node_idx])
+        x_data, fanin_list, fanout_list, or_idx = add_extra_or_long_clause(x_data, fanin_list, fanout_list, extra_or_list)
+        extra_po.append(or_idx)
     
     # Check loop 
     visited = []
